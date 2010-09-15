@@ -55,7 +55,16 @@ illegal in most countries ;-)
 Changelog
 ------------------------------------------------------------------------------------------
 
-v0.2.2: fourth public release, posted on Cemetech, Omnimaga and TI-Bank on 20100914.
+v0.2.3: posted on Cemetech, Omnimaga and TI-Bank on 20100914.
+    * supported AMS versions: 2.05, 2.09, 3.01, 3.10 (all models), 2.08 (89 only for now,
+      I don't have copies of 2.08 for 92+ and for V200 - but the patching code may work
+      on those as well, seeing that 2.08 and 2.09 are very close to each other).
+    * new shrinking capabilities:
+        * EXPERIMENTAL: shrink AMS 2.09 for 89, so as to make it fit in the same number
+          of sectors as AMS 2.01-2.05 :-)
+          (USE AT YOUR OWN RISK - only lightly tested !)
+
+v0.2.2: posted on Cemetech, Omnimaga and TI-Bank on 20100914.
     * supported AMS versions: 2.05, 2.09, 3.01, 3.10 (all models), 2.08 (89 only for now,
       I don't have copies of 2.08 for 92+ and for V200 - but the patching code may work
       on those as well, seeing that 2.08 and 2.09 are very close to each other).
@@ -68,14 +77,14 @@ v0.2.2: fourth public release, posted on Cemetech, Omnimaga and TI-Bank on 20100
           just fine)
     * now distributing binary diffs suitable for xdelta 1.x, xdelta 3.x and bsdiff.
 
-v0.2.1: third public release, posted on Cemetech, Omnimaga and TI-Bank on 20100822.
+v0.2.1: posted on Cemetech, Omnimaga and TI-Bank on 20100822.
     * supported AMS versions: 2.05, 2.09, 3.01, 3.10 (all models).
     * new unlocking capabilities:
         * remove artificial limitation of the size of ASM programs on AMS 2.xx;
         * remove "Invalid Program Reference" error, artificial limitation of AMS 2.xx and
           later when using ASM programs in expressions.
 
-v0.2: second public release, posted on Cemetech, Omnimaga and TI-Bank on 20100813.
+v0.2: posted on Cemetech, Omnimaga and TI-Bank on 20100813.
     * supported AMS versions: 2.05, 2.09, 3.01, 3.10 (all models).
     * now named "tiosfix", todo/wish list expanded.
     * tiosfix now checks and updates the AMS ("basecode") checksum.
@@ -121,15 +130,15 @@ Todo / wish list
       NOTE: due to pagination, TI-Z80 OS support is harder than TI-68k OS support...
       
 /   * shrink AMS binaries, so as to leave more Flashapp & archive room available to
-      users and programmers.
-      The only "easily" (-enough) reachable targets for shrinking are AMS 2.08 (done in
-      v0.2.2) and 2.09 for 89, whose original version reduces the amount of available
-      archive memory by 10% (compared to older AMS 2.xx versions), due to a spill of
-      respectively only ~100 and ~800 bytes onto the next sector...
-      All other versions must be shrunk by at least 16K - this is MUCH harder !
-      NOTE: significant chunks of data at the end of the OS can be moved to the space
-      wasted by TI (but used by PedroM) between ROM_base + 0x13000 (approximately) and
-      ROM_base + 0x17FFF.
+      users and programmers. Significant chunks of data at the end of the OS can be
+      moved to the space wasted by TI (but rightfully used by PedroM) between
+      ROM_base + 0x13000 (approximately) and ROM_base + 0x17FFF.
+        * the only easily reachable targets for shrinking, AMS 2.08 and 2.09 for 89,
+          have now been shrunk by 316 and 848 bytes respectively (v0.2.2 for 2.08,
+          v0.2.3 for 2.09). This is enough to make them fit in the same number of
+          sectors as older AMS 2.xx versions, and give back to the user 64 KB of archive
+          memory robbed by these upgrades.
+        * all other versions must be shrunk by at least 16K - this is MUCH harder !
       NOTE: could the duplicated "y1-99" "y1-99'" strings be optimized ?
 
 0   * fix TI's bugs for them. AMS has nothing of the magnitude of the bug that pleagues

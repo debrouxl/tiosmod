@@ -260,12 +260,16 @@ static void FixAMS(void) {
 
 
 static void ShrinkAMS(void) {
-    uint8_t buffer[100];
+    uint8_t buffer[256];
     uint32_t temp;
-    uint32_t src =  UINT32_C(0x33FEE0);
-    uint32_t dest = UINT32_C(0x214000);
+    uint32_t src;
+    uint32_t dest;
 
-    if (I == 11 && ROM_base == 0x200000) {
+    if (I == 11 && CalculatorType == TI89) {
+        src  = UINT32_C(0x33FEE0);
+        dest = UINT32_C(0x214000);
+        temp = dest;
+
         printf("Shrinking AMS 2.08 for 89, to make it fit into the same number of sectors as earlier AMS 2.xx versions...");
         // 33FEE0: 10 bytes: BITMAP( 5, 5) referenced by GD_Eraser.
         GetNBytes(buffer, 10, src);
@@ -302,7 +306,7 @@ static void ShrinkAMS(void) {
         //GetNBytes(buffer, 10, src);
         //PutNBytes(buffer, 10, dest);
         //PutLong(dest, UINT32_C(0x2B97E8));
-        PutLong(UINT32_C(0x214000), UINT32_C(0x2B97E8));
+        PutLong(temp, UINT32_C(0x2B97E8));
         //src += 10, dest += 10;
         src += 10;
         // 33FF34: 10 bytes: BITMAP( 5, 5) referenced by a pointer in an array.
@@ -395,8 +399,172 @@ static void ShrinkAMS(void) {
         PutLong(temp, UINT32_C(0x212080));
         printf(" shrunk by %" PRIu32 " bytes.\n", SizeShrunk);
     }
-    else if (I == 12 && ROM_base == 0x200000) {
-        printf("TODO: shrink AMS 2.09 for 89, to make it fit into the same number of sectors as earlier AMS 2.xx versions.\n");
+    else if (I == 12 && CalculatorType == TI89) {
+        src  = UINT32_C(0x33FFB0);
+        dest = UINT32_C(0x214000);
+
+        printf("WIP: Shrinking AMS 2.09 for 89, to make it fit into the same number of sectors as earlier AMS 2.xx versions...");
+        // 33FFB0: 90 bytes: TITABLED menu.
+        GetNBytes(buffer, 90, src);
+        PutNBytes(buffer, 90, dest);
+        PutLong(dest, UINT32_C(0x2F5DD2));
+        src += 90, dest += 90;
+
+        // 34000A: 126 bytes: Table formats dialog. Needs patching.
+        GetNBytes(buffer, 126, src);
+        PutNBytes(buffer, 126, dest);
+        PutLong(dest + 38, dest + 16);
+        PutLong(dest, UINT32_C(0x2F7FE8));
+        src += 126, dest += 126;
+
+        // 340088: 150 bytes: Table setup dialog. Needs patching.
+        GetNBytes(buffer, 150, src);
+        PutNBytes(buffer, 150, dest);
+        PutLong(dest + 86, dest + 40);
+        PutLong(dest + 118, dest + 52);
+        PutLong(dest, UINT32_C(0x2F870A));
+        src += 150, dest += 150;
+
+        // 34011E: 38 bytes: "WARNING - Graph screen size unknown, so Graph <-> Table setting not supported" dialog. Does not need patching.
+        GetNBytes(buffer, 38, src);
+        PutNBytes(buffer, 38, dest);
+        PutLong(dest, UINT32_C(0x2FA8D8));
+        src += 38, dest += 38;
+
+        // 340144: 128 bytes: TITEXTED menu.
+        GetNBytes(buffer, 128, src);
+        PutNBytes(buffer, 128, dest);
+        PutLong(dest, UINT32_C(0x224312));
+        src += 128, dest += 128;
+
+        // 3401C4: 10 bytes: BITMAP( 5, 5) referenced by GD_Eraser.
+        temp = dest;
+        GetNBytes(buffer, 10, src);
+        PutNBytes(buffer, 10, dest);
+        PutLong(dest, UINT32_C(0x237362));
+        src += 10, dest += 10;
+        // 3401CE: 10 bytes: BITMAP( 5, 5) referenced by GD_Eraser.
+        GetNBytes(buffer, 10, src);
+        PutNBytes(buffer, 10, dest);
+        PutLong(dest, UINT32_C(0x237368));
+        src += 10, dest += 10;
+        // 3401D8: 26 bytes: BITMAP( B, B) referenced by GT_WinCursor.
+        GetNBytes(buffer, 26, src);
+        PutNBytes(buffer, 26, dest);
+        PutLong(dest, UINT32_C(0x2A8CCE));
+        src += 26, dest += 26;
+        // 3401F2:  8 bytes: BITMAP( 3, 3) referenced by GT_WinCursor.
+        GetNBytes(buffer, 8, src);
+        PutNBytes(buffer, 8, dest);
+        PutLong(dest, UINT32_C(0x2A8CE4));
+        src += 8, dest += 8;
+        // 3401FA: 10 bytes: BITMAP( 5, 3) referenced by GT_WinCursor.
+        GetNBytes(buffer, 10, src);
+        PutNBytes(buffer, 10, dest);
+        PutLong(dest, UINT32_C(0x2A8CFA));
+        src += 10, dest += 10;
+        // 340204: 10 bytes: BITMAP( 5, 3) referenced by GT_WinCursor.
+        GetNBytes(buffer, 10, src);
+        PutNBytes(buffer, 10, dest);
+        PutLong(dest, UINT32_C(0x2A8D10));
+        src += 10, dest += 10;
+        // 34020E: 10 bytes: BITMAP( 5, 5) referenced by a pointer in an array.
+        // It is the same value as the first BITMAP referenced by GD_Eraser, let's optimize it away.
+        //GetNBytes(buffer, 10, src);
+        //PutNBytes(buffer, 10, dest);
+        //PutLong(dest, UINT32_C(0x2B97E8));
+        PutLong(temp, UINT32_C(0x2B99B0));
+        //src += 10, dest += 10;
+        src += 10;
+        // 340218: 10 bytes: BITMAP( 5, 5) referenced by a pointer in an array.
+        GetNBytes(buffer, 10, src);
+        PutNBytes(buffer, 10, dest);
+        PutLong(dest, UINT32_C(0x2B99B4));
+        src += 10, dest += 10;
+        // 340222: 10 bytes: BITMAP( 5, 5) referenced by a pointer in an array and GT_WinCursor.
+        GetNBytes(buffer, 10, src);
+        PutNBytes(buffer, 10, dest);
+        PutLong(dest, UINT32_C(0x2B99B8));
+        PutLong(dest, UINT32_C(0x2A8CA6));
+        src += 10, dest += 10;
+        // 34022C: 10 bytes: BITMAP( 5, 5) referenced by a pointer in an array.
+        GetNBytes(buffer, 10, src);
+        PutNBytes(buffer, 10, dest);
+        PutLong(dest, UINT32_C(0x2B99C0));
+        src += 10, dest += 10;
+        // 340236: 10 bytes: BITMAP( 5, 5) referenced by a pointer in an array.
+        GetNBytes(buffer, 10, src);
+        PutNBytes(buffer, 10, dest);
+        PutLong(dest, UINT32_C(0x2B99BC));
+        src += 10, dest += 10;
+        // 340240: 68 bytes: BITMAP(15,15) referenced by GT_WinCursor.
+        GetNBytes(buffer, 68, src);
+        PutNBytes(buffer, 68, dest);
+        PutLong(dest, UINT32_C(0x2A8D24));
+        src += 68, dest += 68;
+        // 340284: 12 bytes: BITMAP( 7, 7) referenced by GT_WinCursor.
+        GetNBytes(buffer, 12, src);
+        PutNBytes(buffer, 12, dest);
+        PutLong(dest, UINT32_C(0x2A8D3E));
+        src += 12, dest += 12;
+        // 340290: 16 bytes: BITMAP( 6, B) referenced by a pointer in an array.
+        GetNBytes(buffer, 16, src);
+        PutNBytes(buffer, 16, dest);
+        PutLong(dest, UINT32_C(0x2B99C4));
+        src += 16, dest += 16;
+        // 3402A0: 16 bytes: BITMAP( 6, B) referenced by a pointer in an array.
+        GetNBytes(buffer, 16, src);
+        PutNBytes(buffer, 16, dest);
+        PutLong(dest, UINT32_C(0x2B99C8));
+        src += 16, dest += 16;
+        // 3402B0: 16 bytes: BITMAP( 6, B) referenced by a pointer in an array.
+        GetNBytes(buffer, 16, src);
+        PutNBytes(buffer, 16, dest);
+        PutLong(dest, UINT32_C(0x2B99CC));
+        src += 16, dest += 16;
+        // 3402C0: 16 bytes: BITMAP( 6, B) referenced by a pointer in an array.
+        GetNBytes(buffer, 16, src);
+        PutNBytes(buffer, 16, dest);
+        PutLong(dest, UINT32_C(0x2B99D0));
+        src += 16, dest += 16;
+        // 3402D0: 16 bytes: BITMAP( 6, B) referenced by a pointer in an array.
+        GetNBytes(buffer, 16, src);
+        PutNBytes(buffer, 16, dest);
+        PutLong(dest, UINT32_C(0x2B99D4));
+        src += 16, dest += 16;
+        // 3402E0:  8 bytes: BITMAP( 3, 3) without any absolute references... 3x3 O / box
+        GetNBytes(buffer, 8, src);
+        PutNBytes(buffer, 8, dest);
+        src += 8, dest += 8;
+        // 3402E8:  8 bytes: BITMAP( 3, 3) without any absolute references... 3x3 +
+        GetNBytes(buffer, 8, src);
+        PutNBytes(buffer, 8, dest);
+        src += 8, dest += 8;
+        // 3402F0:  8 bytes: BITMAP( 3, 3) without any absolute references... a dot in the middle
+        GetNBytes(buffer, 8, src);
+        PutNBytes(buffer, 8, dest);
+        src += 8, dest += 8;
+        // 3402F8:  8 bytes: BITMAP( 3, 3) without any absolute references... 3x3 X
+        GetNBytes(buffer, 8, src);
+        PutNBytes(buffer, 8, dest);
+        src += 8, dest += 8;
+
+        // 340300:  4 bytes: basecode checksum.
+        temp = GetLong(UINT32_C(0x340300));
+        PutLong(temp, UINT32_C(0x33FFB0));
+        // 340304: 67 bytes: end signature.
+        GetNBytes(buffer, 67, UINT32_C(0x340304));
+        PutNBytes(buffer, 67, UINT32_C(0x33FFB4)); // 33FFF7
+
+        // Decrease length of field 8000.
+        SizeShrunk = src - UINT32_C(0x33FFB0);
+        temp = GetLong(UINT32_C(0x212002));
+        temp -= SizeShrunk;
+        PutLong(temp, UINT32_C(0x212002));
+        // Decrease length of field 8070 as well (spotted by RabbitSign).
+        temp -= 126;
+        PutLong(temp, UINT32_C(0x212080));
+        printf(" shrunk by %" PRIu32 " bytes.\n", SizeShrunk);
     }
 }
 

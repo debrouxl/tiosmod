@@ -73,6 +73,7 @@ static uint32_t F_8x10_data;
 static uint32_t TrapBFunctions;
 static uint8_t  AMS_Major;
 static uint8_t  AMS_Minor;
+static uint8_t  CalculatorType;
 
 static uint32_t enabled_changes;
 
@@ -361,15 +362,14 @@ WrongType:
 
 
 static int AMSSanityChecks(void) {
-    uint8_t calc;
     uint32_t maxAMSsize;
     uint32_t range;
 
     // Check calculator type
     fseek (input, 8+HEAD, SEEK_SET);
-    calc = fgetc(input);
-    printf("\tINFO: found calculator type %" PRIu8 "\n", calc);
-    if ((calc != TI89) && (calc != TI92P) && (calc != V200) && (calc != TI89T)) {
+    CalculatorType = fgetc(input);
+    printf("\tINFO: found calculator type %" PRIu8 "\n", CalculatorType);
+    if ((CalculatorType != TI89) && (CalculatorType != TI92P) && (CalculatorType != V200) && (CalculatorType != TI89T)) {
         printf("\n    ERROR: unknown calculator type, aborting...\n");
         fclose(input);
         return 4;
@@ -394,7 +394,7 @@ static int AMSSanityChecks(void) {
     maxAMSsize = UINT32_C(0x140000) - UINT32_C(0x12000);
     if (I >= 11) {
         // 89 OS is larger than 92+/V200 OS.
-        if (calc != TI92P) {
+        if (CalculatorType != TI92P) {
             maxAMSsize += UINT32_C(0x10000);
         }
         if (I >= 13) {
@@ -405,7 +405,7 @@ static int AMSSanityChecks(void) {
         }
     }
     range = UINT32_C(0x10000);
-    if (calc == V200 && I == 12) {
+    if (CalculatorType == V200 && I == 12) {
         range += UINT32_C(0x10000);
     }
 
