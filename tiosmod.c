@@ -1,14 +1,14 @@
 /**
- * \file tiosfix.c
- *
- * tiosfix - a computer-based unlocking and optimizing program aimed at official
- *           TI-68k calculators OS
+ * \file tiosmod.c
+ * \brief building blocks for a computer-based unlocking and optimizing
+ *        program aimed at official TI-68k calculators OS
  * Copyright (C) 2010 Lionel Debroux (lionel underscore debroux yahoo fr)
  * Portions Copyright (C) 2000-2010 Olivier Armand (ExtendeD)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 2 of the License.
+ * the Free Software Foundation, version 2 (and only version 2) of the
+ * License.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <unistd.h>
 
 
 // The program's command-line switches
@@ -77,6 +78,13 @@ static uint32_t enabled_changes;
 
 static FILE *input;
 static FILE *output;
+static char * OutputFileName;
+static uint32_t OutputFileSize;
+static uint32_t SizeShrunk;
+
+
+// The function called by main() after opening an AMS update file and setting the base internal variables.
+void PatchAMS(void);
 
 
 // Read data at the current file position.
@@ -137,7 +145,7 @@ static uint32_t GetLong (uint32_t absaddr) {
     return ReadLong();
 }
 
-static void GetNBytes (unsigned char *buffer, uint32_t n, uint32_t absaddr) {
+static void GetNBytes (uint8_t * buffer, uint32_t n, uint32_t absaddr) {
     uint32_t i;
     fseek(output, absaddr - delta, SEEK_SET);
     for (i = 0; i < n; i++) {
@@ -372,9 +380,9 @@ static int AMSSanityChecks(void) {
     fgetc(input);
     I = fgetc(input);
     printf("\tINFO: found AMS version type %" PRIu32 "\n", I);
-    if (I != 9 && I != 12 && I != 13 && I != 14) {
+    if (I != 9 && I != 11 && I != 12 && I != 13 && I != 14) {
         printf ("\n    ERROR : unsupported AMS version.\n"
-                "    Use AMS 2.05, 2.09, 3.01 or 3.10.\n"
+                "    Use AMS 2.05, 2.08, 2.09, 3.01 or 3.10.\n"
                 "    If you really need another version, please contact the author.\n"
                );
         fclose (input);
@@ -384,7 +392,7 @@ static int AMSSanityChecks(void) {
     // Check size.
     // Starting at 12, TI didn't bother incrementing the version number properly...
     maxAMSsize = UINT32_C(0x140000) - UINT32_C(0x12000);
-    if (I >= 12) {
+    if (I >= 11) {
         // 89 OS is larger than 92+/V200 OS.
         if (calc != TI92P) {
             maxAMSsize += UINT32_C(0x10000);
@@ -416,23 +424,25 @@ static int AMSSanityChecks(void) {
 static int CreateFillOutputFile(int argc, char *argv[]) {
     uint32_t i;
 
-    printf ("    Creating output file '%s'...\n", argv[argc - 1]);
-    if ((output = fopen (argv[argc - 1], "rb")) != NULL) {
-        printf ("\n    ERROR : file '%s' already exists. Refusing to overwrite it.", argv[argc - 1]);
+    OutputFileName = argv[argc - 1];
+    printf ("    Creating output file '%s'...\n", OutputFileName);
+    if ((output = fopen (OutputFileName, "rb")) != NULL) {
+        printf ("\n    ERROR : file '%s' already exists. Refusing to overwrite it.", OutputFileName);
         fclose(output);
         fclose(input);
         return 7;
     }
 
-    if ((output = fopen (argv[argc - 1], "w+b"))==NULL) {
-        printf ("\n    ERROR : can't create '%s'.\n", argv[argc - 1]);
+    if ((output = fopen (OutputFileName, "w+b"))==NULL) {
+        printf ("\n    ERROR : can't create '%s'.\n", OutputFileName);
         fclose (input);
         return 8;
     }
 
-    printf("\tINFO: copying %" PRIu32 " bytes to output file\n", BasecodeSize + HEAD + AdditionalSize);
+    OutputFileSize = BasecodeSize + HEAD + AdditionalSize;
+    printf("\tINFO: copying %" PRIu32 " bytes to output file\n", OutputFileSize);
     fseek (input, 0, SEEK_SET);
-    for (i = 0; i < BasecodeSize + HEAD + AdditionalSize; i++) {
+    for (i = 0; i < OutputFileSize; i++) {
         fputc (fgetc (input), output);
     }
 
@@ -474,6 +484,7 @@ static int SetupAMS(int argc, char *argv[]) {
     AMS_Major = GetByte(temp) - '0';
     AMS_Minor = ((GetByte(temp + 2) - '0') * 10) + (GetByte(temp + 3) - '0');
 
+    SizeShrunk = 0;
 
     // One last check: the basecode checksum.
     BasecodeSize = GetLong(ROM_base + UINT32_C(0x12000) + 2) + 2;
@@ -483,7 +494,7 @@ static int SetupAMS(int argc, char *argv[]) {
            "\t      computed basecode checksum is %08" PRIX32 ".\n\n", temp, temp2);
     if (temp != temp2) {
         printf ("    ERROR : computed checksum does not match the checksum embedded into AMS.\n"
-                "    Refusing to modify the file, please use a pristine copy of AMS.");
+                "            Refusing to modify the file, please use a pristine copy of AMS.");
         fclose(output);
         fclose(input);
         return 9;
@@ -493,262 +504,37 @@ static int SetupAMS(int argc, char *argv[]) {
 }
 
 
-static void UnlockAMS(void) {
-    uint32_t temp, temp2;
-
-    // 1a) Hard-code HW2/3Patch: disable RAM execution protection.
-    {
-        temp = rom_call_addr(EX_stoBCD);
-        printf("Killing RAM execution protection at %06" PRIX32 "\n", temp + 0x56);
-        PutShort(0x0000, temp + 0x58);
-        PutShort(0x0000, temp + 0x5C);
-        PutShort(0x0000, temp + 0x62);
-        PutShort(0x0000, temp + 0x68);
-    }
-
-
-    // 1b) Disable Flash execution protection by setting a higher value in port 700012.
-    {
-        // * 1 direct write in the early reset code.
-        temp = ROM_base + 0x12188;
-        Seek(temp);
-        temp = SearchLong(UINT32_C(0x700012));
-        printf("Killing Flash execution protection initialization at %06" PRIX32 "\n", temp - 8);
-        PutShort(0x003F, temp - 6);
-        // * 1 reference in a subroutine of the trap #$B, function $10 handler.
-        temp = GetAMSTrapBFunction(0x10);
-        printf("Killing Flash execution protection update at %06" PRIX32 "\n", temp);
-        Seek(temp);
-        WriteLong(UINT32_C(0x33FC003F));
-        WriteLong(UINT32_C(0x700012));
-        WriteShort(0x4E75);
-    }
-
-
-    // 1c) Hard-code a change equivalent to MaxMem and XPand: don't call the subroutine EM_GetArchiveMemoryBeginning
-    //     calls before returning, after rounding up the result of OO_GetEndOfAllFlashApps, that both MaxMem and XPand modify.
-    {
-        temp = rom_call_addr(EM_GetArchiveMemoryBeginning);
-        Seek(temp);
-        temp = SearchLong(UINT32_C(0xFFFF0000));
-        printf("Killing the limitation of the available amount of archive memory at %06" PRIX32 "\n", temp);
-        WriteShort(0x2040);
-        WriteShort(0x508F);
-        WriteShort(0x4E75);
-    }
-
-
-    // 1d) Hard-code Flashappy, for seamless install of unsigned FlashApps (e.g. some versions of GTC).
-    {
-        Seek(ROM_base + UINT32_C(0x12188));
-        temp = rom_call_addr(XR_stringPtr);
-        temp2 = SearchLong(UINT32_C(0x0000020E));
-        if (ReadShort() != 0x4EB9 || ReadLong() != temp) {
-            printf("Unexpected data, skipping the killing of FlashApp signature checking !\n");
-        }
-        else {
-            temp = Get68kPCRelativeValue(temp2 - 0x0C);
-            temp2 = rom_call_addr(memcmp);
-            Seek(temp);
-            temp = SearchLong(temp2);
-            printf("Killing FlashApp signature checking at %06" PRIX32 "\n", temp - 0x0E);
-            temp2 = GetShort(temp - 0x08);
-            PutShort(temp2, temp - 0x0C);
-        }
-    }
-
-
-    // 1e) Disable artificial limitation of the size of ASM programs on AMS 2.xx
-    //     (TI made the check ineffective in 3.xx, without removing it...).
-    {
-        if (AMS_Major == 2) {
-            temp = rom_call_addr(ReleaseVersion);
-            Seek(ROM_base + UINT32_C(0x12188));
-            if (AMS_Minor == 5) {
-                temp = SearchLong(0x0C526000);
-                printf("Killing the limitation of the size of ASM programs at %06" PRIX32 "\n", temp - 4);
-                PutShort(0xFFFF, temp - 2);
-            }
-            else if (AMS_Minor == 9) {
-                temp = SearchLong(0x0C536000);
-                printf("Killing the limitation of the size of ASM programs at %06" PRIX32 "\n", temp - 4);
-                PutShort(0xFFFF, temp - 2);
-            }
-            else {
-                // Do nothing. This block is unreachable anyway, due to the version type check.
-            }
-        }
-    }
-
-
-    // 1f) Remove "Invalid Program Reference" artificial limitation.
-    {
-        Seek(ROM_base + UINT32_C(0x12188));
-        temp = SearchShort(0xA244);
-        printf("Killing the \"Invalid Program Reference\" error at %06" PRIX32 ", ", temp - 2);
-        PutShort(0x4E71, temp - 2);
-        temp = SearchShort(0xA244);
-        printf("%06" PRIX32 ", ", temp - 2);
-        PutShort(0x4E71, temp - 2);
-        temp = SearchShort(0xA244);
-        printf("%06" PRIX32 "\n", temp - 2);
-        PutShort(0x4E71, temp - 2);
-    }
-}
-
-
-static void OptimizeAMS(void) {
-    uint32_t offset, limit;
-    uint32_t temp, temp2, temp3, temp4, temp5;
-
-    // 2a) Rewrite HeapDeref
-    {
-        temp = rom_call_addr(HeapDeref);
-        temp2 = GetShort(temp + 0x0A);
-        if (temp2 == 0) {
-            temp2 = GetShort(temp + 0x0C);
-        }
-        printf("Optimizing HeapDeref at %06" PRIX32 "\n", temp);
-        Seek(temp);
-        WriteLong(UINT32_C(0x302F0004));
-        WriteShort(0xE548);
-        if (temp2 < 0x8000) {
-            WriteShort(0x2078);
-            WriteShort(temp2);
-        }
-        else {
-            WriteShort(0x2079);
-            WriteLong(temp2);
-        }
-        WriteLong(UINT32_C(0x20700000));
-        WriteShort(0x4E75);
-    }
-
-
-    // 2b) Hard-code OO_GetAttr(OO_SYSTEM_FRAME, OO_(S|L|H)FONT) into the subroutine of DrawStr/DrawChar/DrawClipChar.
-    if (enabled_changes & AMS_HARDCODE_FONTS_FLAG)
-    {
-        F_4x6_data  = GetAMSAttribute(0x300);
-        F_6x8_data  = GetAMSAttribute(0x301);
-        F_8x10_data = GetAMSAttribute(0x302);
-
-        temp = rom_call_addr(DrawChar);
-        if (AMS_Major == 2) {
-            temp = Get68kPCRelativeValue(temp + 0x26);
-            offset = 0;
-        }
-        else {
-            temp = GetLong(temp + 0x26);
-            offset = 2;
-        }
-        printf("Optimizing character drawing in %06" PRIX32 "\n", temp);
-
-        Seek(temp + 0x7A + offset);
-        WriteShort(0x41F9);
-        WriteLong(F_8x10_data);
-        WriteShort(0x602A);
-        Seek(temp + 0xC2 + offset);
-        WriteShort(0x41F9);
-        WriteLong(F_6x8_data);
-        WriteShort(0x602A);
-        Seek(temp + 0x112 + offset);
-        WriteShort(0x41F9);
-        WriteLong(F_4x6_data);
-        WriteShort(0x602A);
-    }
-
-
-    // 2c) Hard-code OO_GetAttr(OO_SYSTEM_FRAME, OO_SFONT) in rewritten sf_width.
-    if (enabled_changes & AMS_HARDCODE_FONTS_FLAG)
-    {
-        temp = rom_call_addr(sf_width);
-        printf("Optimizing sf_width at %06" PRIX32 "\n", temp);
-        Seek(temp);
-        WriteShort(0x41F9);
-        WriteLong(F_4x6_data);
-        WriteShort(0x7000);
-        WriteLong(UINT32_C(0x102F0005));
-        WriteShort(0x3200);
-        WriteShort(0xD040);
-        WriteShort(0xD041);
-        WriteShort(0xD040);
-        WriteLong(UINT32_C(0x10300000));
-        WriteShort(0x4E75);
-    }
-
-
-    // 2d) Hard-code English language in XR_stringPtr.
-    // WARNING, language localizations won't work properly after this...
-    if (enabled_changes & AMS_HARDCODE_ENGLISH_LANGUAGE_FLAG)
-    {
-        temp = rom_call_addr(XR_stringPtr);
-        temp2 = GetLong(AMS_Frame + 0x04);
-        limit = GetLong(temp2 + 0x0E);
-        temp3 = rom_call_addr(EV_runningApp);
-        temp4 = rom_call_addr(HeapTable);
-        temp5 = rom_call_addr(OO_CondGetAttr);
-
-
-        printf("Optimizing XR_stringPtr at %06" PRIX32 "\n", temp);
-        Seek(temp);
-        WriteLong(UINT32_C(0x302F0006)); // WriteLong(0x202F0004);
-        WriteShort(0x0C40); // WriteShort(0x0C80); 
-        WriteShort(limit); // WriteLong(limit);
-        WriteShort(0x620E);
-        WriteShort(0x41F9);
-        WriteLong(temp2);
-        WriteShort(0xE548);
-        WriteLong(UINT32_C(0x20700012)); // WriteLong(0x2070812);
-        WriteShort(0x4E75);
-        
-        WriteShort(0x42A7);
-        WriteShort(0x4857);
-        WriteLong(UINT32_C(0x06400800));
-        WriteShort(0x3F00);
-        WriteShort(0x4267);
-        if (temp3 < 0x8000) {
-            WriteShort(0x3238);
-            WriteShort(temp3);
-        }
-        else {
-            WriteShort(0x3239);
-            WriteLong(temp3);
-        }
-        if (temp4 < 0x8000) {
-            WriteShort(0x41F8);
-            WriteShort(temp4);
-        }
-        else {
-            WriteShort(0x41F9);
-            WriteLong(temp4);
-        }
-        WriteShort(0xE549);
-        WriteLong(UINT32_C(0x20701000));
-        WriteLong(UINT32_C(0x2F280014));
-        WriteShort(0x4EB9);
-        WriteLong(temp5);
-        WriteLong(UINT32_C(0x4FEF000C));
-        WriteShort(0x205F);
-        WriteShort(0x4E75);
-    }
-}
-
-
-static void FixAMS(void) {
-    // TODO: fix TI's bugs for them. They have abandoned the TI-68k calculator line in 2005...
-}
-
-
 static void FinishAMS(void) {
     uint32_t temp;
 
     // Update basecode checksum.
-    temp = ComputeAMSChecksum(BasecodeSize, ROM_base + UINT32_C(0x12000));
+    temp = ComputeAMSChecksum(BasecodeSize - SizeShrunk, ROM_base + UINT32_C(0x12000));
     printf("\n\tINFO: new basecode checksum is %08" PRIX32 ".\n", temp);
-    PutLong(temp, BasecodeSize + ROM_base + UINT32_C(0x12000));
+    PutLong(temp, BasecodeSize - SizeShrunk + ROM_base + UINT32_C(0x12000));
 
     printf ("\n    Fix successful.\n");
+
+    OutputFileSize -= SizeShrunk;
+    // Change little-endian size bytes if necessary.
+    if (SizeShrunk != 0) {
+        OutputFileSize -= HEAD;
+        temp =   ((OutputFileSize & UINT32_C(0x000000FF)) << 24) 
+               | ((OutputFileSize & UINT32_C(0x0000FF00)) << 8) 
+               | ((OutputFileSize & UINT32_C(0x00FF0000)) >> 8) 
+               | ((OutputFileSize & UINT32_C(0xFF000000)) >> 24);
+        OutputFileSize += HEAD;
+        PutLong(temp, ROM_base + UINT32_C(0x12000) - 4); // Slightly dirty.
+    }
+
     fclose(output);
+
+    // Truncate file if necessary.
+    if (SizeShrunk != 0) {
+        printf("\n\tINFO: final file size is %" PRIu32 " (0x%" PRIX32 ")\n", OutputFileSize, OutputFileSize);
+        if (truncate(OutputFileName, OutputFileSize) != 0) {
+            printf("ERROR truncating file, OS will probably be invalid\n");
+        }
+    }
 }
 
 
@@ -757,9 +543,9 @@ int main (int argc, char *argv[])
 {
     int i;
 
-    printf ("\n- TIOS Fixer v0.2.1 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n\n");
+    printf ("\n- TIOS Modder v0.2.2 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n\n");
     if ((argc < 3) || (!strcmp(argv[1], "-h")) || (!strcmp(argv[1], "--help"))) {
-        printf ("    Usage : tiosfix [+/-options] base.xxu patched_base.xxu\n"
+        printf ("    Usage : tiosmod [+/-options] base.xxu patched_base.xxu\n"
                 "    options: * " AMS_HARDCODE_FONTS_STR " (defaults to enabled)\n"
                 "             * " AMS_HARDCODE_ENGLISH_LANGUAGE_STR " (defaults to disabled)\n"
                 "    (prefix name option with '+' to force enable it, with '-' to force disable it)\n"
@@ -800,11 +586,8 @@ int main (int argc, char *argv[])
 
 
     // Fiddle with AMS :-)
-    UnlockAMS();
+    PatchAMS();
 
-    OptimizeAMS();
-
-    FixAMS();
 
     // Cleanup and return.
     FinishAMS();
