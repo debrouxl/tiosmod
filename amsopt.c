@@ -1,43 +1,64 @@
-// Derived from my (Lionel Debroux) expanded version (0.3) of ExtendeD's "flapinst".
+/**
+ * amsopt - a computer-based AMS (TI-68k official OS) unlocking and optimizing program.
+ * Copyright (C) 2010 Lionel Debroux (lionel underscore debroux yahoo fr)
+ * Portions Copyright (C) 2000-2010 Olivier Armand
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 2 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, 5th Floor, Boston, MA 02110-1301, USA
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <string.h>
 #include <inttypes.h>
 
+
 #define EndAMSSign 73
 
+
+// Calculator models
 enum {TI89 = 3, TI92 = 1, V200 = 8, TI89T = 9};
 
-enum {AMS205 = 9, AMS209 = 12};
 
-
+// The indices of several ROM_CALLs used by this program.
 #define DrawChar                     (0x1A4)
 #define DrawClipChar                 (0x191)
 #define DrawStr                      (0x1A9)
 #define EM_GetArchiveMemoryBeginning (0x3CF)
 #define EX_stoBCD                    (0x0C0)
 #define HeapDeref                    (0x096)
-#define ReleaseDate                  (0x43F)
+#define memcmp                       (0x270)
 #define ReleaseVersion               (0x440)
 #define sf_width                     (0x4D3)
+#define XR_stringPtr                 (0x293)
 
 static uint32_t HEAD;
 static uint32_t delta;
 static uint32_t ROM_base;
 static uint32_t jmp_tbl;
 static uint32_t TIOS_entries;
-static uint32_t AMS_frame;
+static uint32_t AMS_Frame;
 static uint32_t F_4x6_data;
 static uint32_t F_6x8_data;
 static uint32_t F_8x10_data;
+static uint32_t TrapBFunctions;
+static uint8_t  AMS_Major;
 
-FILE *input;
-FILE *output;
+static FILE *input;
+static FILE *output;
 
 
-// Read data at the current file position
+// Read data at the current file position.
 static uint8_t ReadByte (void) {
     uint8_t temp_byte;
     temp_byte = fgetc(output);
@@ -61,7 +82,7 @@ static uint32_t ReadLong (void) {
 }
 
 
-// Write data at the current file position
+// Write data at the current file position.
 static void WriteByte (uint8_t byte_in) {
     fputc (((int)byte_in) & 0xFF, output);
 }
@@ -79,7 +100,7 @@ static void WriteLong (uint32_t long_in) {
 }
 
 
-// Read data at the given absolute address
+// Read data at the given absolute address.
 static uint8_t GetByte (uint32_t absaddr) {
     fseek(output, absaddr - delta, SEEK_SET);
     return ReadByte();
@@ -104,7 +125,7 @@ static void GetNBytes (unsigned char *buffer, uint32_t n, uint32_t absaddr) {
 }
 
 
-// Write data at the given absolute address
+// Write data at the given absolute address.
 static void PutByte (uint8_t byte_in, uint32_t absaddr) {
     fseek(output, absaddr - delta, SEEK_SET);
     WriteByte(byte_in);
@@ -129,12 +150,92 @@ static void PutNBytes (uint8_t *buffer, uint32_t n, uint32_t absaddr) {
 }
 
 
+// Seek in output file to point to given absolute address.
+static void Seek (uint32_t absaddr) {
+    fseek(output, absaddr - delta, SEEK_SET);
+}
+
+static uint32_t Tell (void) {
+    return (ftell(output) + delta);
+}
+
+
+// Search for values.
+static uint32_t SearchByte (uint8_t value) {
+    while (ReadByte() != value);
+    return Tell();
+}
+
+static uint32_t SearchShort (uint16_t value) {
+    while (ReadShort() != value);
+    return Tell();
+}
+
+static uint32_t SearchLong (uint32_t value) {
+    while (ReadLong() != value) {
+        fseek(output, -2, SEEK_CUR);
+    }
+    return Tell();
+}
+
+
+// Get address of given ROM_CALL.
 static uint32_t rom_call_addr (uint32_t idx) {
     return GetLong(jmp_tbl + 4 * idx);
 }
 
+// Get address of given vector.
+static uint32_t GetVector (uint32_t absaddr) {
+    fseek(output, HEAD + 0x88 + absaddr, SEEK_SET);
+    return ReadLong();
+}
 
-uint32_t FindTIFL(uint32_t I, FILE *file) {
+// Get address of a PC-relative JSR or LEA.
+static uint32_t GetPCRelativeValue(uint32_t absaddr) {
+    Seek(absaddr);
+    return absaddr + ((int32_t)(int16_t)ReadShort());
+}
+
+// Get address of given function of trap #$B.
+static uint32_t GetTrapBFunction (uint32_t idx) {
+    uint32_t temp;
+    uint32_t temp2;
+    
+    if (TrapBFunctions == 0) {
+        temp = GetVector(0xAC);
+        Seek(temp);
+        temp = SearchLong(0xC6FC0006);
+        TrapBFunctions = GetPCRelativeValue(temp - 6);
+    }
+    return GetLong(TrapBFunctions + 6 * idx);
+}
+
+// Get attribute in OO_SYSTEM_FRAME.
+static uint32_t GetAttribute (uint32_t attr) {
+    uint32_t temp;
+    uint32_t temp2;
+    uint32_t limit;
+    
+    if (AMS_Frame == 0) {
+        temp = GetVector(0xA8);
+        AMS_Frame = GetLong(temp + 10);
+    }
+    Seek(AMS_Frame + 0x0E);
+    limit = ReadLong();
+    while (limit >= 0) {
+        temp = ReadLong();
+        temp2 = ReadLong();
+        if (temp == attr) {
+            return temp2;
+        }
+        limit--;
+    }
+    return UINT32_C(0xFFFFFFFF);
+}
+
+
+// Find **TIFL** in .xxu file.
+uint32_t FindTIFL (uint32_t I, FILE *file) {
     char *point;
     point = malloc(0xA008);
     if (!point) {
@@ -162,7 +263,8 @@ uint32_t FindTIFL(uint32_t I, FILE *file) {
 }
 
 
-int main(int argc, char *argv[])
+// Where all the fun begins...
+int main (int argc, char *argv[])
 {
     uint8_t buffer[30];
     uint32_t size;
@@ -190,7 +292,7 @@ int main(int argc, char *argv[])
     if (strncmp (buffer, "**TIFL**", sizeof("**TIFL**")-1)) {
 WrongType:
         printf ("\n    Error : wrong input file type.\n"\
-        "            use .89u, .9xu or .v2u ROM files.\n");
+        "    Use .89u, .9xu or .v2u ROM files.\n");
         fclose(input);
         return 3;
     }
@@ -227,47 +329,43 @@ WrongType:
 
     fseek (input, 2+ HEAD, SEEK_SET);
     fread (buffer, 1, 4, input);
-    size =   0x0000001L * (unsigned char)buffer[3]
-           + 0x0000100L * (unsigned char)buffer[2]
-           + 0x0010000L * (unsigned char)buffer[1]
-           + 0x1000000L * (unsigned char)buffer[0];
+    size =   UINT32_C(0x0000001) * (unsigned char)buffer[3]
+           + UINT32_C(0x0000100) * (unsigned char)buffer[2]
+           + UINT32_C(0x0010000) * (unsigned char)buffer[1]
+           + UINT32_C(0x1000000) * (unsigned char)buffer[0];
     printf("\tINFO: found AMS of size %" PRIu32 "\n", size);
 
-    // Calculator type ?
+    // Check calculator type
     fseek (input, 8+HEAD, SEEK_SET);
     calc=fgetc(input);
+    printf("\tINFO: found calculator type %" PRIu8 "\n", calc);
     if ((calc != TI89) && (calc != TI92) && (calc != V200) && (calc != TI89T)) {
-        printf("Unknown calculator type %" PRIu8 "\n", calc);
+        printf("\n    Error: unknown calculator type, aborting...\n");
         fclose(input);
         return 4;
     }
-    printf("\tINFO: found calculator type %" PRIu8 "\n", calc);
+
+    // Check size.
+    maxAMSsize = (calc < V200) ? (2 * 1048576 - 3 * 65536) : (4 * 1048576 - 3 * 65536);
+    if (size > maxAMSsize) {
+        printf ("\n    Error: OS too large, aborting...\n");
+        fclose(input);
+        return 5;
+    }
 
     // Check AMS version.
     fgetc(input);
     fgetc(input);
     I = fgetc(input);
-    if (I != AMS205 && I != AMS209) {
+    printf("\tINFO: found AMS version type %" PRIu32 "\n", I);
+    if (I != 9 && I != 12 && I != 13 && I != 14) {
 WrongVersion:
-        printf ("\n"
-        "      Error : unsupported AMS version.\n"\
-        "              Use AMS 2.05 or 2.09; you can also help expanding this program.\n"
+        printf ("\n    Error : unsupported AMS version.\n"\
+        "    Use AMS 2.05, 2.09, 3.01 or 3.10; you can also help expanding this program.\n"
         );
         fclose (input);
-        return 5;
-    }
-    printf("\tINFO: found AMS version type %" PRIu32 "\n", I);
-
-    // Check size.
-    maxAMSsize = (I == AMS205) ? 0x140000UL-0x12000UL : 0x150000UL-0x12000UL;
-    printf("\tINFO: maximum expected size for that AMS version type is %" PRIu32 "\n", maxAMSsize);
-
-    if (size > maxAMSsize) {
-        printf ("\n\n    Error: OS larger than expected, aborting...\n");
-        fclose(input);
         return 6;
     }
-
 
     // Create and fill output file.
     printf ("    Creating output file '%s'...\n", argv[2]);
@@ -295,130 +393,151 @@ WrongVersion:
 
     // OK, we can now focus on unlocking and optimizing AMS :-)
     // Setup absolute address -> file offset translation.
-    fseek(output, HEAD + 0x150, SEEK_SET);
-    jmp_tbl = ReadLong();
+    jmp_tbl = GetVector(0xC8);
     ROM_base = jmp_tbl & UINT32_C(0xE00000);
     delta = ROM_base + 0x12000 - HEAD;
 
     TIOS_entries = rom_call_addr(-1);
+    TrapBFunctions = 0;
+    AMS_Frame = 0;
+    temp = rom_call_addr(ReleaseVersion);
+    AMS_Major = GetByte(temp);
 
 
     // 1a) Hard-code HW2/3Patch: disable RAM execution protection.
-    temp = rom_call_addr(EX_stoBCD);
-    printf("Killing RAM execution protection at %06" PRIx32 "\n", temp + 0x56);
-    PutShort(0x0000, temp + 0x58);
-    PutShort(0x0000, temp + 0x5C);
-    PutShort(0x0000, temp + 0x62);
-    PutShort(0x0000, temp + 0x68);
+    {
+        temp = rom_call_addr(EX_stoBCD);
+        printf("Killing RAM execution protection at %06" PRIx32 "\n", temp + 0x56);
+        PutShort(0x0000, temp + 0x58);
+        PutShort(0x0000, temp + 0x5C);
+        PutShort(0x0000, temp + 0x62);
+        PutShort(0x0000, temp + 0x68);
+    }
 
 
     // 1b) Disable Flash execution protection by setting a higher value in port 700012.
-    //     * 1 direct write in the early reset code.
-    fseek(output, HEAD + 0x188, SEEK_SET);
-    while (ReadLong() != UINT32_C(0x700012)) {
-        fseek(output, -2, SEEK_CUR);
+    {
+        // * 1 direct write in the early reset code.
+        temp = ROM_base + 0x12188;
+        Seek(temp);
+        temp = SearchLong(UINT32_C(0x700012));
+        printf("Killing Flash execution protection initialization at %06" PRIx32 "\n", temp - 8);
+        PutShort(0x003F, temp - 6);
+        // * 1 reference in a subroutine of the trap #$B, function $10 handler.
+        temp = GetTrapBFunction(0x10);
+        printf("Killing Flash execution protection update at %06" PRIx32 "\n", temp);
+        Seek(temp);
+        WriteLong(0x33FC003F);
+        WriteLong(0x700012);
+        WriteShort(0x4E75);
     }
-    fseek(output, -6, SEEK_CUR);
-    printf("Killing Flash execution protection (1) at %06" PRIx32 "\n", ftell(output) + delta - 2);
-    WriteShort(0x003F);
-    //     * 1 reference in a subroutine of the trap #$B, function $10 handler.
-    fseek(output, HEAD + 0x134, SEEK_SET);
-    temp = ReadLong();
-    fseek(output, temp - delta, SEEK_SET);
-    while (ReadShort() != 0xC6FC) {
-        temp += 2;
-    }
-    fseek(output, -4, SEEK_CUR);
-    temp2 = (int32_t)(int16_t)ReadShort();
-    temp = temp - 2 + temp2;
-    temp = GetLong(temp + 0x60);
-    temp2 = (int32_t)(int16_t)GetShort(temp + 0x08);
-    temp = (temp + 0x08) + temp2;
-    printf("Killing Flash execution protection (2) at %06" PRIx32 "\n", temp);
-    PutShort(0x4E75, temp);
 
 
     // 1c) Hard-code a change equivalent to MaxMem and XPand: don't call the subroutine EM_GetArchiveMemoryBeginning
     //     calls before returning, after rounding up the result of OO_GetEndOfAllFlashApps, that both MaxMem and XPand modify.
-    temp = rom_call_addr(EM_GetArchiveMemoryBeginning);
-    temp2 = 0;
-    while (temp2 != UINT32_C(0xFFFF0000)) {
-        temp2 = GetLong(temp);
-        temp += 2;
+    {
+        temp = rom_call_addr(EM_GetArchiveMemoryBeginning);
+        Seek(temp);
+        temp = SearchLong(UINT32_C(0xFFFF0000));
+        printf("Increasing amount of archive memory at %06" PRIx32 "\n", temp);
+        WriteShort(0x2040);
+        WriteShort(0x508F);
+        WriteShort(0x4E75);
     }
-    printf("Increasing amount of archive memory at %06" PRIx32 "\n", temp + 0x02);
-    PutShort(0x2040, temp + 0x02);
-    PutShort(0x508F, temp + 0x04);
-    PutShort(0x4E75, temp + 0x06);
-    /* // Hard-code MaxMem.
-    temp2 = (int32_t)(int16_t)GetShort(temp + 0x24);
-    temp = (temp + 0x24) + temp2;
-    temp2 = 0;
-    while (temp2 != 0x0C80) {
-        temp2 = GetShort(temp);
-        temp += 2;
-    }
-    printf("Unleashing more archive memory for HW1 calcs at %06" PRIx32 "\n", temp + 0x04);
-    PutByte(0x60, temp + 0x04);*/
 
 
-    // 1d) TODO: Hard-code Flashappy, for seamless install of unsigned FlashApps.
-    //     AFAICS, Flashappy screws with a subroutine of trap #$B, function $9 handler.
+    // 1d) Hard-code Flashappy, for seamless install of unsigned FlashApps.
+    {
+        Seek(ROM_base + 0x12188);
+        temp = rom_call_addr(XR_stringPtr);
+        temp2 = SearchLong(0x0000020E);
+        if (ReadShort() != 0x4EB9 || ReadLong() != temp) {
+            printf("Unexpected data, skipping the killing of FlashApp signature checking !\n");
+        }
+        temp = GetPCRelativeValue(temp2 - 0x0C);
+        temp2 = rom_call_addr(memcmp);
+        Seek(temp);
+        temp = SearchLong(temp2);
+        printf("Killing FlashApp signature checking at %06" PRIx32 "\n", temp - 0x0E);
+        temp2 = GetShort(temp - 0x08);
+        PutShort(temp2, temp - 0x0C);
+    }
 
 
     // 2a) Rewrite HeapDeref
-    // AMS 1.xx: 30 2F 00 04 E5 48 20 78  xx xx 20 70 00 00 4E 75
-    // AMS 2.xx: 70 00 30 2F 00 04 E5 88  20 78 xx xx 20 70 08 00  4E 75
-    // AMS 3.xx: 70 00 30 2F 00 04 E5 88  20 79 xx xx xx xx 20 70  08 00 4E 75
-    temp = rom_call_addr(HeapDeref);
-    printf("Rewriting HeapDeref at %06" PRIx32 "\n", temp);
-    GetNBytes(buffer, 16, temp);
-    buffer[0]  = 0x30; buffer[1]  = 0x2F; buffer[2]  = 0x00; buffer[3]  = 0x04;
-    buffer[4]  = 0xE5; buffer[5]  = 0x48; buffer[6]  = 0x20; buffer[7]  = 0x78;
-    buffer[8]  = buffer[10];
-    buffer[9]  = buffer[11];
-    buffer[10] = 0x20; buffer[11] = 0x70; buffer[12] = 0x00; buffer[13] = 0x00;
-    buffer[14] = 0x4E; buffer[15] = 0x75;
-    PutNBytes(buffer, 16, rom_call_addr(HeapDeref));
+    {
+        temp = rom_call_addr(HeapDeref);
+        temp2 = GetShort(temp + 0x0A);
+        if (temp2 == 0) {
+            temp2 = GetShort(temp + 0x0C);
+        }
+        printf("Optimizing HeapDeref at %06" PRIx32 "\n", temp);
+        Seek(temp);
+        WriteLong(0x302F0004);
+        WriteShort(0xE548);
+        if (temp2 < 0x8000) {
+            WriteShort(0x2078);
+            WriteShort(temp2);
+        }
+        else {
+            WriteShort(0x2079);
+            WriteLong(temp2);
+        }
+        WriteLong(0x20700000);
+        WriteShort(0x4E75);
+    }
 
 
     // 2b) Hard-code OO_GetAttr(OO_SYSTEM_FRAME, OO_(S|L|H)FONT) into the subroutine of DrawStr/DrawChar/DrawClipChar.
-    fseek(output, HEAD + 0x130, SEEK_SET);
-    temp = ReadLong();
-    AMS_frame   = GetLong(temp + 10);
-    F_4x6_data  = GetLong(AMS_frame + 0x96);
-    F_6x8_data  = GetLong(AMS_frame + 0x9E);
-    F_8x10_data = GetLong(AMS_frame + 0xA6);
+    {
+        uint32_t offset = 0;
 
-    temp = rom_call_addr(DrawChar);
-    temp2 = (int32_t)(int16_t)GetShort(temp + 0x26);
-    temp = (temp + 0x26) + temp2;
+        F_4x6_data  = GetAttribute(0x300);
+        F_6x8_data  = GetAttribute(0x301);
+        F_8x10_data = GetAttribute(0x302);
 
-    printf("Optimizing character drawing in %06" PRIx32 "\n", temp);
-    PutShort(0x41F9, temp + 0x7A);
-    PutLong(F_8x10_data, temp + 0x7C);
-    PutShort(0x602A, temp + 0x80);
-    PutShort(0x41F9, temp + 0xC2);
-    PutLong(F_6x8_data, temp + 0xC4);
-    PutShort(0x602A, temp + 0xC8);
-    PutShort(0x41F9, temp + 0x112);
-    PutLong(F_4x6_data, temp + 0x114);
-    PutShort(0x602A, temp + 0x118);
+        temp = rom_call_addr(DrawChar);
+        if (AMS_Major == '2') {
+            temp = GetPCRelativeValue(temp + 0x26);
+        }
+        else {
+            temp = GetLong(temp + 0x26);
+            offset = 2;
+        }
+        printf("Optimizing character drawing in %06" PRIx32 "\n", temp);
+
+
+        Seek(temp + 0x7A + offset);
+        WriteShort(0x41F9);
+        WriteLong(F_8x10_data);
+        WriteShort(0x602A);
+        Seek(temp + 0xC2 + offset);
+        WriteShort(0x41F9);
+        WriteLong(F_6x8_data);
+        WriteShort(0x602A);
+        Seek(temp + 0x112 + offset);
+        WriteShort(0x41F9);
+        WriteLong(F_4x6_data);
+        WriteShort(0x602A);
+    }
 
 
     // 2c) Hard-code OO_GetAttr(OO_SYSTEM_FRAME, OO_SFONT) in rewritten sf_width.
-    temp = rom_call_addr(sf_width);
-    printf("Rewriting sf_width at %06" PRIx32 "\n", temp);
-    PutShort(0x41F9, temp + 0x00);
-    PutLong(F_4x6_data, temp + 0x02);
-    PutShort(0x7000, temp + 0x06);
-    PutLong(0x102F0005, temp + 0x08);
-    PutShort(0x3200, temp + 0x0C);
-    PutShort(0xD040, temp + 0x0E);
-    PutShort(0xD041, temp + 0x10);
-    PutShort(0xD040, temp + 0x12);
-    PutLong(0x10300000, temp + 0x14);
-    PutShort(0x4E75, temp + 0x18);
+    {
+        temp = rom_call_addr(sf_width);
+        printf("Optimizing sf_width at %06" PRIx32 "\n", temp);
+        Seek(temp);
+        WriteShort(0x41F9);
+        WriteLong(F_4x6_data);
+        WriteShort(0x7000);
+        WriteLong(0x102F0005);
+        WriteShort(0x3200);
+        WriteShort(0xD040);
+        WriteShort(0xD041);
+        WriteShort(0xD040);
+        WriteLong(0x10300000);
+        WriteShort(0x4E75);
+    }
 
 
     printf ("\n    Optimization successful.\n");
