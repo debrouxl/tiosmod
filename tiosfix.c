@@ -71,6 +71,7 @@ static uint32_t F_6x8_data;
 static uint32_t F_8x10_data;
 static uint32_t TrapBFunctions;
 static uint8_t  AMS_Major;
+static uint8_t  AMS_Minor;
 
 static uint32_t enabled_changes;
 
@@ -206,38 +207,38 @@ static uint32_t rom_call_addr (uint32_t idx) {
 }
 
 //! Get address of given vector.
-static uint32_t GetVector (uint32_t absaddr) {
+static uint32_t GetAMSVector (uint32_t absaddr) {
     fseek(output, HEAD + 0x88 + absaddr, SEEK_SET);
     return ReadLong();
 }
 
 //! Get address of a PC-relative JSR or LEA.
-static uint32_t GetPCRelativeValue(uint32_t absaddr) {
+static uint32_t Get68kPCRelativeValue (uint32_t absaddr) {
     Seek(absaddr);
     return absaddr + ((int32_t)(int16_t)ReadShort());
 }
 
 //! Get address of given function of trap #$B.
-static uint32_t GetTrapBFunction (uint32_t idx) {
+static uint32_t GetAMSTrapBFunction (uint32_t idx) {
     uint32_t temp;
 
     if (TrapBFunctions == 0) {
-        temp = GetVector(0xAC);
+        temp = GetAMSVector(0xAC);
         Seek(temp);
         temp = SearchLong(UINT32_C(0xC6FC0006));
-        TrapBFunctions = GetPCRelativeValue(temp - 6);
+        TrapBFunctions = Get68kPCRelativeValue(temp - 6);
     }
     return GetLong(TrapBFunctions + 6 * idx);
 }
 
 //! Get attribute in OO_SYSTEM_FRAME.
-static uint32_t GetAttribute (uint32_t attr) {
+static uint32_t GetAMSAttribute (uint32_t attr) {
     uint32_t temp;
     uint32_t temp2;
     int32_t limit;
     
     if (AMS_Frame == 0) {
-        temp = GetVector(0xA8);
+        temp = GetAMSVector(0xA8);
         AMS_Frame = GetLong(temp + 10);
     }
     Seek(AMS_Frame + 0x0E);
@@ -254,7 +255,7 @@ static uint32_t GetAttribute (uint32_t attr) {
 }
 
 //! Compute checksum.
-static uint32_t ComputeChecksum(uint32_t size, uint32_t start) {
+static uint32_t ComputeAMSChecksum(uint32_t size, uint32_t start) {
     uint16_t temp;
     uint32_t temp2 = 0;
     Seek(start);
@@ -462,7 +463,7 @@ static int SetupAMS(int argc, char *argv[]) {
 
 
     // Setup internal variables.
-    jmp_tbl = GetVector(0xC8);
+    jmp_tbl = GetAMSVector(0xC8);
     ROM_base = jmp_tbl & UINT32_C(0xE00000);
     delta = ROM_base + UINT32_C(0x12000) - HEAD;
 
@@ -470,13 +471,14 @@ static int SetupAMS(int argc, char *argv[]) {
     TrapBFunctions = 0;
     AMS_Frame = 0;
     temp = rom_call_addr(ReleaseVersion);
-    AMS_Major = GetByte(temp);
+    AMS_Major = GetByte(temp) - '0';
+    AMS_Minor = ((GetByte(temp + 2) - '0') * 10) + (GetByte(temp + 3) - '0');
 
 
     // One last check: the basecode checksum.
     BasecodeSize = GetLong(ROM_base + UINT32_C(0x12000) + 2) + 2;
     temp = GetLong(BasecodeSize + ROM_base + UINT32_C(0x12000));
-    temp2 = ComputeChecksum(BasecodeSize, ROM_base + UINT32_C(0x12000));
+    temp2 = ComputeAMSChecksum(BasecodeSize, ROM_base + UINT32_C(0x12000));
     printf("\tINFO: embedded basecode checksum is %08" PRIX32 ".\n"
            "\t      computed basecode checksum is %08" PRIX32 ".\n\n", temp, temp2);
     if (temp != temp2) {
@@ -491,7 +493,7 @@ static int SetupAMS(int argc, char *argv[]) {
 }
 
 
-static void KillAMSProtections(void) {
+static void UnlockAMS(void) {
     uint32_t temp, temp2;
 
     // 1a) Hard-code HW2/3Patch: disable RAM execution protection.
@@ -514,7 +516,7 @@ static void KillAMSProtections(void) {
         printf("Killing Flash execution protection initialization at %06" PRIX32 "\n", temp - 8);
         PutShort(0x003F, temp - 6);
         // * 1 reference in a subroutine of the trap #$B, function $10 handler.
-        temp = GetTrapBFunction(0x10);
+        temp = GetAMSTrapBFunction(0x10);
         printf("Killing Flash execution protection update at %06" PRIX32 "\n", temp);
         Seek(temp);
         WriteLong(UINT32_C(0x33FC003F));
@@ -545,7 +547,7 @@ static void KillAMSProtections(void) {
             printf("Unexpected data, skipping the killing of FlashApp signature checking !\n");
         }
         else {
-            temp = GetPCRelativeValue(temp2 - 0x0C);
+            temp = Get68kPCRelativeValue(temp2 - 0x0C);
             temp2 = rom_call_addr(memcmp);
             Seek(temp);
             temp = SearchLong(temp2);
@@ -554,10 +556,48 @@ static void KillAMSProtections(void) {
             PutShort(temp2, temp - 0x0C);
         }
     }
+
+
+    // 1e) Disable artificial limitation of the size of ASM programs on AMS 2.xx
+    //     (TI made the check ineffective in 3.xx, without removing it...).
+    {
+        if (AMS_Major == 2) {
+            temp = rom_call_addr(ReleaseVersion);
+            Seek(ROM_base + UINT32_C(0x12188));
+            if (AMS_Minor == 5) {
+                temp = SearchLong(0x0C526000);
+                printf("Killing the limitation of the size of ASM programs at %06" PRIX32 "\n", temp - 4);
+                PutShort(0xFFFF, temp - 2);
+            }
+            else if (AMS_Minor == 9) {
+                temp = SearchLong(0x0C536000);
+                printf("Killing the limitation of the size of ASM programs at %06" PRIX32 "\n", temp - 4);
+                PutShort(0xFFFF, temp - 2);
+            }
+            else {
+                // Do nothing. This block is unreachable anyway, due to the version type check.
+            }
+        }
+    }
+
+
+    // 1f) Remove "Invalid Program Reference" artificial limitation.
+    {
+        Seek(ROM_base + UINT32_C(0x12188));
+        temp = SearchShort(0xA244);
+        printf("Killing the \"Invalid Program Reference\" error at %06" PRIX32 ", ", temp - 2);
+        PutShort(0x4E71, temp - 2);
+        temp = SearchShort(0xA244);
+        printf("%06" PRIX32 ", ", temp - 2);
+        PutShort(0x4E71, temp - 2);
+        temp = SearchShort(0xA244);
+        printf("%06" PRIX32 "\n", temp - 2);
+        PutShort(0x4E71, temp - 2);
+    }
 }
 
 
-void OptimizeAMS(void) {
+static void OptimizeAMS(void) {
     uint32_t offset, limit;
     uint32_t temp, temp2, temp3, temp4, temp5;
 
@@ -588,20 +628,20 @@ void OptimizeAMS(void) {
     // 2b) Hard-code OO_GetAttr(OO_SYSTEM_FRAME, OO_(S|L|H)FONT) into the subroutine of DrawStr/DrawChar/DrawClipChar.
     if (enabled_changes & AMS_HARDCODE_FONTS_FLAG)
     {
-        F_4x6_data  = GetAttribute(0x300);
-        F_6x8_data  = GetAttribute(0x301);
-        F_8x10_data = GetAttribute(0x302);
+        F_4x6_data  = GetAMSAttribute(0x300);
+        F_6x8_data  = GetAMSAttribute(0x301);
+        F_8x10_data = GetAMSAttribute(0x302);
 
         temp = rom_call_addr(DrawChar);
-        if (AMS_Major == '2') {
-            temp = GetPCRelativeValue(temp + 0x26);
+        if (AMS_Major == 2) {
+            temp = Get68kPCRelativeValue(temp + 0x26);
+            offset = 0;
         }
         else {
             temp = GetLong(temp + 0x26);
             offset = 2;
         }
         printf("Optimizing character drawing in %06" PRIX32 "\n", temp);
-
 
         Seek(temp + 0x7A + offset);
         WriteShort(0x41F9);
@@ -694,11 +734,16 @@ void OptimizeAMS(void) {
 }
 
 
-void CleanupAMS(void) {
+static void FixAMS(void) {
+    // TODO: fix TI's bugs for them. They have abandoned the TI-68k calculator line in 2005...
+}
+
+
+static void FinishAMS(void) {
     uint32_t temp;
 
     // Update basecode checksum.
-    temp = ComputeChecksum(BasecodeSize, ROM_base + UINT32_C(0x12000));
+    temp = ComputeAMSChecksum(BasecodeSize, ROM_base + UINT32_C(0x12000));
     printf("\n\tINFO: new basecode checksum is %08" PRIX32 ".\n", temp);
     PutLong(temp, BasecodeSize + ROM_base + UINT32_C(0x12000));
 
@@ -712,7 +757,7 @@ int main (int argc, char *argv[])
 {
     int i;
 
-    printf ("\n- TIOS Fixer v0.2 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n\n");
+    printf ("\n- TIOS Fixer v0.2.1 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n\n");
     if ((argc < 3) || (!strcmp(argv[1], "-h")) || (!strcmp(argv[1], "--help"))) {
         printf ("    Usage : tiosfix [+/-options] base.xxu patched_base.xxu\n"
                 "    options: * " AMS_HARDCODE_FONTS_STR " (defaults to enabled)\n"
@@ -755,13 +800,14 @@ int main (int argc, char *argv[])
 
 
     // Fiddle with AMS :-)
-    KillAMSProtections();
+    UnlockAMS();
 
     OptimizeAMS();
 
+    FixAMS();
 
     // Cleanup and return.
-    CleanupAMS();
+    FinishAMS();
 
     return 0;
 }

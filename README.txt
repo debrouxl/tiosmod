@@ -50,8 +50,15 @@ most countries ;-)
 Changelog
 ------------------------------------------------------------------------------------------
 
-v0.2: second public release on 20100813.
-    * supported AMS versions: unchanged.
+v0.2.1: third public release, posted on Cemetech, Omnimaga and TI-Bank on 20100822.
+    * supported AMS versions: 2.05, 2.09, 3.01, 3.10.
+    * new unlocking capabilities:
+        * remove artificial limitation of the size of ASM programs;
+        * remove "Invalid Program Reference" error, artificial limitation of AMS 2.xx and
+          later when using ASM programs in expressions.
+
+v0.2: second public release, posted on Cemetech, Omnimaga and TI-Bank on 20100813.
+    * supported AMS versions: 2.05, 2.09, 3.01, 3.10.
     * now named "tiosfix", todo/wish list expanded.
     * tiosfix now checks and updates the AMS ("basecode") checksum.
     * new optimization capabilities:
@@ -65,21 +72,21 @@ v0.2: second public release on 20100813.
 
 v0.1: first somewhat public release, posted on #ti on 20100717.
     * supported AMS versions: 2.05, 2.09, 3.01, 3.10.
+    * new unlocking capabilities:
+        * skip FlashApp signature validation (Flashappy);
+
+v0.0: sent privately to several persons.
+    * supported AMS versions: 2.05, 2.09.
     * unlocking capabilities:
         * RAM execution protection (HW2/3Patch);
         * Flash execution protection (latest XPand, extended to all models).
         * remove artificial limitation of the amount of archive memory (MaxMem & XPand);
-        * skip FlashApp signature validation (Flashappy);
     * optimization capabilities:
         * rewrite HeapDeref to match the AMS 1.xx code (the many inline versions are
           untouched, obviously);
         * hard-code the standard fonts in DrawStr/DrawChar/DrawClipChar and sf_width:
           the ability to redefine fonts is seldom used, but it slows down (asymptotically)
           by ~20% on F_6x8 and F_8x10, by ~80% on F_4x6 (stupidly implemented).
-
-v0.0: sent privately to several persons.
-    * supported AMS versions: 2.05, 2.09.
-    * Flashappy equivalent not coded yet.
 
 ------------------------------------------------------------------------------------------
 Todo / wish list
