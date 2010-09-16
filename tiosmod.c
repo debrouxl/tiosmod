@@ -380,13 +380,15 @@ static int AMSSanityChecks(void) {
     fgetc(input);
     I = fgetc(input);
     printf("\tINFO: found AMS version type %" PRIu32 "\n", I);
-    if (I != 9 && I != 11 && I != 12 && I != 13 && I != 14) {
-        printf ("\n    ERROR : unsupported AMS version.\n"
-                "    Use AMS 2.05, 2.08, 2.09, 3.01 or 3.10.\n"
-                "    If you really need another version, please contact the author.\n"
-               );
-        fclose (input);
-        return 5;
+    if (I != 9 && I != 12 && I != 13 && I != 14) {
+        if (I != 11 || CalculatorType != TI89) {
+            printf ("\n    ERROR : unsupported AMS version.\n"
+                    "    Use AMS 2.05, 2.08 (89 only for now), 2.09, 3.01 or 3.10.\n"
+                    "    If you really need another version, please contact the author.\n"
+                   );
+            fclose (input);
+            return 5;
+        }
     }
 
     // Check size.
@@ -543,7 +545,8 @@ int main (int argc, char *argv[])
 {
     int i;
 
-    printf ("\n- TIOS Modder v0.2.2 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n\n");
+    printf ("\n- TIOS Modder v0.2.3a by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n");
+    printf ("- Using patchset: " PATCHDESC "\n\n");
     if ((argc < 3) || (!strcmp(argv[1], "-h")) || (!strcmp(argv[1], "--help"))) {
         printf ("    Usage : tiosmod [+/-options] base.xxu patched_base.xxu\n"
                 "    options: * " AMS_HARDCODE_FONTS_STR " (defaults to enabled)\n"

@@ -26,26 +26,22 @@ abandoning the TI-68k line years ago:
 It's high time we programmers/users tackled the tasks that the manufacturer is no longer
 doing !
 And now that we have factored, in the summer of 2009, all interesting public RSA signing
-keys used in TI-68k and TI-Z80 calculators, we don't even have to use FreeFlash, or the
-older TIB-Receiver, any longer :-)
+keys used in TI-68k and TI-Z80 calculators, we don't even have to use FSign + FreeFlash,
+or the older TIB-Receiver, any longer :-)
 
 
 ------------------------------------------------------------------------------------------
-Usage of the patcher
+Usage information
 ------------------------------------------------------------------------------------------
-`tiosmod [-h/--help]`
-`tiosmod [+-options] base.xxu patched_base.xxu`
-After patching the OS, if you want to transfer the OS to a real calculator (the usual
-warranty disclaimers apply, see below):
-    * (preferred nowadays) use RabbitSign to re-sign it, so as to be able to seamlessly
-      transfer the OS;
-    * "f-sign" the OS with FreeFlash and transfer it to your calculator as described in
-      the FreeFlash readme.
-See http://www.ticalc.org/archives/news/articles/14/145/145273.html for more information.
+* Users just interested in testing patchsets should use the binary diffs with the program
+  whose name is indicated by the binary diff's extension.
+* Programmers interested in tinkering with the patcher / patchsets, who know what they're
+  doing, can figure out how to compile the program by themselves ;-)
+  See http://www.ticalc.org/archives/news/articles/14/145/145273.html for links to
+  RabbitSign (preferred nowadays) and FSign+FreeFlash, the former being more convenient.
 
-Needless to say, the program is - at least for now - aimed at those who know what they're
-doing. You're on your own if you mess up calculators by using pristine or modified
-versions of the patcher. No build scripts are distributed, and this is on purpose.
+Standard warranty disclaimer: you're on your own if you mess up calculators by using
+pristine or modified versions of the patcher & patchset(s).
 
 Please also note also that *redistributing* modified versions of TI's copyrighted OS is
 illegal in most countries ;-)
@@ -54,6 +50,19 @@ illegal in most countries ;-)
 ------------------------------------------------------------------------------------------
 Changelog
 ------------------------------------------------------------------------------------------
+
+v0.2.3a: posted on Cemetech, Omnimaga and TI-Bank on 20100916.
+    * supported AMS versions: no change.
+    * bugfix: typo in the shrinking code for AMS 2.09 for 89 caused incorrect patching,
+      yielding crash-producing memory corruption, when tracing functions or plots in
+      the graph screen.
+    * improvements:
+        * reject AMS 2.08 for 92+ and V200 until they have _actually_ been tested
+          (although the current patching code is expected to work, since the AMS 2.08
+          and AMS 2.09 binaries are very close to each other).
+        * add and print a patch description below the program's name & version.
+
+Github repository http://github.com/debrouxl/tiosmod created on 20100915.
 
 v0.2.3: posted on Cemetech, Omnimaga and TI-Bank on 20100914.
     * supported AMS versions: 2.05, 2.09, 3.01, 3.10 (all models), 2.08 (89 only for now,

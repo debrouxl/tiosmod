@@ -11,6 +11,8 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details.
  */ 
 
+#define PATCHDESC "amspatch-debrouxl-v7"
+
 // Include the file that contains the helper functions we're taking advantage of.
 #include "tiosmod.c"
 
@@ -485,7 +487,7 @@ static void ShrinkAMS(void) {
         GetNBytes(buffer, 10, src);
         PutNBytes(buffer, 10, dest);
         PutLong(dest, UINT32_C(0x2B99B8));
-        PutLong(dest, UINT32_C(0x2A8CA6));
+        PutLong(dest, UINT32_C(0x2A8CB6));
         src += 10, dest += 10;
         // 34022C: 10 bytes: BITMAP( 5, 5) referenced by a pointer in an array.
         GetNBytes(buffer, 10, src);
