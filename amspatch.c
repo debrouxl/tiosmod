@@ -11,11 +11,13 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details.
  */ 
 
-#define PATCHDESC "amspatch-debrouxl-v7"
+#define PATCHDESC "amspatch-debrouxl-v8"
 
 // Include the file that contains the helper functions we're taking advantage of.
 #include "tiosmod.c"
 
+
+//! Kill the protections set by TI.
 static void UnlockAMS(void) {
     uint32_t temp, temp2;
 
@@ -119,6 +121,7 @@ static void UnlockAMS(void) {
 }
 
 
+//! Optimize several sore spots of the OS.
 static void OptimizeAMS(void) {
     uint32_t offset, limit;
     uint32_t temp, temp2, temp3, temp4, temp5;
@@ -256,11 +259,35 @@ static void OptimizeAMS(void) {
 }
 
 
+//! Fix TI's bugs: they have abandoned the TI-68k calculator line in 2005...
 static void FixAMS(void) {
-    // TODO: fix TI's bugs for them. They have abandoned the TI-68k calculator line in 2005...
+    uint32_t temp, temp2;
+    
+    // 3a) Idea by Martial Demolins (Folco): on trap #3, wire a new routine that does a UniOS/PreOS-style HeapDeref.
+    //     Pristine AMS copies have OSenqueue wired, but that won't work at all.
+    {
+        temp = rom_call_addr(HeapTable);
+        temp2 = ROM_base + 0x13800;
+        Seek(temp2);
+        WriteShort(0xD0C8);
+        WriteShort(0xD0C8);
+        if (temp < 0x8000) {
+            WriteShort(0xD0FC);
+            WriteShort(temp);
+        }
+        else {
+            WriteShort(0xD1FC);
+            WriteLong(temp);
+        }
+        WriteShort(0x2050);
+        WriteShort(0x4E73);
+        SetAMSVector(0x8C, temp2);
+    }
+
 }
 
 
+//! Shrink two AMS versions that are just slightly too large and deprive users from 64 KB of archive memory available on older versions...
 static void ShrinkAMS(void) {
     uint8_t buffer[256];
     uint32_t temp;
@@ -571,6 +598,12 @@ static void ShrinkAMS(void) {
 }
 
 
+//! Add functionality to AMS.
+static void ExpandAMS(void) {
+
+}
+
+
 void PatchAMS(void) {
     UnlockAMS();
 
@@ -579,4 +612,6 @@ void PatchAMS(void) {
     FixAMS();
 
     ShrinkAMS();
+
+    ExpandAMS();
 }

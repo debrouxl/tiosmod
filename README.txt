@@ -51,6 +51,12 @@ illegal in most countries ;-)
 Changelog
 ------------------------------------------------------------------------------------------
 
+v0.2.3b: posted on Cemetech, Omnimaga and TI-Bank on 20100922.
+    * supported AMS versions: no change.
+    * new fixing/enhancement capabilities:
+        * replace buggy AMS trap #3 (wired to OSenqueue, which doesn't work for two
+          reasons) by UniOS/PreOS-style HeapDeref. Suggested by "Folco" Martial Demolins.
+
 v0.2.3a: posted on Cemetech, Omnimaga and TI-Bank on 20100916.
     * supported AMS versions: no change.
     * bugfix: typo in the shrinking code for AMS 2.09 for 89 caused incorrect patching,

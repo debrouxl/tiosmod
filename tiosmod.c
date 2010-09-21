@@ -221,6 +221,12 @@ static uint32_t GetAMSVector (uint32_t absaddr) {
     return ReadLong();
 }
 
+//! Replace given vector with given address.
+static void SetAMSVector (uint32_t absaddr, uint32_t newval) {
+    fseek(output, HEAD + 0x88 + absaddr, SEEK_SET);
+    return WriteLong(newval);
+}
+
 //! Get address of a PC-relative JSR or LEA.
 static uint32_t Get68kPCRelativeValue (uint32_t absaddr) {
     Seek(absaddr);
