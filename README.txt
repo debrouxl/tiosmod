@@ -16,9 +16,8 @@ bothered me for more than six years.
 * the motivation to remove TI's silly protections, while at it, came later, as a
 consequence of TI's increasingly frequent and increasingly vicious attacks on our freedom
 to tinker with the devices we own...
-* in the future, fixing bugs would be nice, too. This motivation was not present either
-when I first thought of fiddling with the OS, but it's a logical consequence of TI
-abandoning the TI-68k line years ago:
+* the motivation to fix bugs was not present either when I first thought of fiddling with
+the OS, but it's a logical consequence of TI abandoning the TI-68k line years ago:
     * the la(te)st OS upgrade for 89T and V200, AMS v3.10, was released in July 2005;
     * the la(te)st OS upgrade for 89 and 92+, AMS v2.09, was released in March 2003
       (and AMS 2.08 & 2.09 for 89 use the 0x340000-0x34FFFF sector, depriving users from
@@ -33,8 +32,16 @@ or the older TIB-Receiver, any longer :-)
 ------------------------------------------------------------------------------------------
 Usage information
 ------------------------------------------------------------------------------------------
-* Users just interested in testing patchsets should use the binary diffs with the program
-  whose name is indicated by the binary diff's extension.
+* Users just interested in using patched AMS versions should use the provided binary
+  diffs, with the open-source no-fee program whose name is indicated by the binary diff's
+  extension. For more information, see the usage help printed by each program.
+  NOTE: the binary diffs provided along with the official distribution perform _all_
+        changes that the patchset knows how to perform, including:
+        * hard-coding the standard font (it will hardly make a difference to anyone,
+          since the possibility of redefining fonts is virtually unused);
+        * hard-coding the English language (it will make a difference to more users,
+          since it interferes with language localizations).
+
 * Programmers interested in tinkering with the patcher / patchsets, who know what they're
   doing, can figure out how to compile the program by themselves ;-)
   See http://www.ticalc.org/archives/news/articles/14/145/145273.html for links to
@@ -50,6 +57,18 @@ illegal in most countries ;-)
 ------------------------------------------------------------------------------------------
 Changelog
 ------------------------------------------------------------------------------------------
+
+v0.2.4: posted on Cemetech, Omnimaga and TI-Bank on 20100925.
+    * supported AMS versions: 2.05, 2.08, 2.09, 3.01, 3.10 for all models.
+    * moved more AMS-specific functions from tiosmod.c to amspatch.c.
+    * improvements:
+        * checking the OS upgrade's size is now done through an exact match where
+          possible;
+        * after finding copies in TI-Connect 1.2, AMS 2.08 for 92+ and V200 have now been
+          tested on emulator and are officially supported;
+    * new fixing capabilities:
+        * fix OSContrastUp/OSContrastDn not to destroy d3 and d4
+          (bug #53 of http://www.technicalc.org/buglist/bugs.pdf).
 
 v0.2.3b: posted on Cemetech, Omnimaga and TI-Bank on 20100922.
     * supported AMS versions: no change.
@@ -156,9 +175,9 @@ Todo / wish list
         * all other versions must be shrunk by at least 16K - this is MUCH harder !
       NOTE: could the duplicated "y1-99" "y1-99'" strings be optimized ?
 
-0   * fix TI's bugs for them. AMS has nothing of the magnitude of the bug that pleagues
+/   * fix TI's bugs for them. AMS has nothing of the magnitude of the bug that pleagues
       84+ OS 2.53MP, but it has bugs nevertheless. See the list at
-      http://www.technicalc.org/buglist/bugs.pdf : fixing bugs 13, 53, 54, 65, 66 and 89
+      http://www.technicalc.org/buglist/bugs.pdf : fixing bugs 13, 54, 65, 66 and 89
       may be reasonably easy. Fixing 25 and 50 (between others) would be nice, but is
       presumably harder than the aforementioned bugs.
 
@@ -174,12 +193,19 @@ Todo / wish list
         * AMS Extender / EasyChar / ticonst;
         * AutoAlphaLock Off.
 
-0   * (??) put new features into the OS ??
+0   * (??) put new features into the OS, or just restore features removed by TI ??
         * PreOS (hard)
+        * OSVRegisterTimer/OSVFreeTimer, removed by TI in AMS 2.04, and their handling
+          in the AI5 handler.
+          __OSTimerVectors is accessible through trap #9 and referenced from the AI5
+          handler of AMS <= 2.03. On those versions, the first vectored timer is wired to
+          the routine that, between others, calls the battery checking code.
+            2) checking whether the room for __OSTimerVectors is really present, but
+               unused, on AMS 2.04+.
 
 
 ------------------------------------------------------------------------------------------
-License: buildling blocks: GPL version 2 only
+License: building blocks: GPL version 2 only
 ------------------------------------------------------------------------------------------
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

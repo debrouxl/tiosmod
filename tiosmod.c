@@ -34,7 +34,7 @@
 #define AMS_HARDCODE_ENGLISH_LANGUAGE_FLAG (0x00000002)
 
 
-// Calculator models
+//! Calculator models
 enum {TI89 = 3, TI92P = 1, V200 = 8, TI89T = 9};
 
 
@@ -53,6 +53,8 @@ enum {TI89 = 3, TI92P = 1, V200 = 8, TI89T = 9};
 #define ReleaseVersion               (0x440)
 #define sf_width                     (0x4D3)
 #define XR_stringPtr                 (0x293)
+#define OSContrastDn                 (0x297)
+#define OSContrastUp                 (0x296)
 
 
 #define AdditionalSize (4 + 2 + 3 + 64)
@@ -215,60 +217,6 @@ static uint32_t rom_call_addr (uint32_t idx) {
     return GetLong(jmp_tbl + 4 * idx);
 }
 
-//! Get address of given vector.
-static uint32_t GetAMSVector (uint32_t absaddr) {
-    fseek(output, HEAD + 0x88 + absaddr, SEEK_SET);
-    return ReadLong();
-}
-
-//! Replace given vector with given address.
-static void SetAMSVector (uint32_t absaddr, uint32_t newval) {
-    fseek(output, HEAD + 0x88 + absaddr, SEEK_SET);
-    return WriteLong(newval);
-}
-
-//! Get address of a PC-relative JSR or LEA.
-static uint32_t Get68kPCRelativeValue (uint32_t absaddr) {
-    Seek(absaddr);
-    return absaddr + ((int32_t)(int16_t)ReadShort());
-}
-
-//! Get address of given function of trap #$B.
-static uint32_t GetAMSTrapBFunction (uint32_t idx) {
-    uint32_t temp;
-
-    if (TrapBFunctions == 0) {
-        temp = GetAMSVector(0xAC);
-        Seek(temp);
-        temp = SearchLong(UINT32_C(0xC6FC0006));
-        TrapBFunctions = Get68kPCRelativeValue(temp - 6);
-    }
-    return GetLong(TrapBFunctions + 6 * idx);
-}
-
-//! Get attribute in OO_SYSTEM_FRAME.
-static uint32_t GetAMSAttribute (uint32_t attr) {
-    uint32_t temp;
-    uint32_t temp2;
-    int32_t limit;
-    
-    if (AMS_Frame == 0) {
-        temp = GetAMSVector(0xA8);
-        AMS_Frame = GetLong(temp + 10);
-    }
-    Seek(AMS_Frame + 0x0E);
-    limit = ReadLong();
-    while (limit >= 0) {
-        temp = ReadLong();
-        temp2 = ReadLong();
-        if (temp == attr) {
-            return temp2;
-        }
-        limit--;
-    }
-    return UINT32_C(0xFFFFFFFF);
-}
-
 //! Compute checksum.
 static uint32_t ComputeAMSChecksum(uint32_t size, uint32_t start) {
     uint16_t temp;
@@ -368,8 +316,7 @@ WrongType:
 
 
 static int AMSSanityChecks(void) {
-    uint32_t maxAMSsize;
-    uint32_t range;
+    uint32_t expectedSize;
 
     // Check calculator type
     fseek (input, 8+HEAD, SEEK_SET);
@@ -381,55 +328,69 @@ static int AMSSanityChecks(void) {
         return 4;
     }
 
-    // Check AMS version.
+    // Get AMS version.
     fgetc(input);
     fgetc(input);
     I = fgetc(input);
     printf("\tINFO: found AMS version type %" PRIu32 "\n", I);
-    if (I != 9 && I != 12 && I != 13 && I != 14) {
-        if (I != 11 || CalculatorType != TI89) {
-            printf ("\n    ERROR : unsupported AMS version.\n"
-                    "    Use AMS 2.05, 2.08 (89 only for now), 2.09, 3.01 or 3.10.\n"
-                    "    If you really need another version, please contact the author.\n"
-                   );
-            fclose (input);
-            return 5;
-        }
-    }
 
     // Check size.
     // Starting at 12, TI didn't bother incrementing the version number properly...
-    maxAMSsize = UINT32_C(0x140000) - UINT32_C(0x12000);
-    if (I >= 11) {
-        // 89 OS is larger than 92+/V200 OS.
-        if (CalculatorType != TI92P) {
-            maxAMSsize += UINT32_C(0x10000);
-        }
-        if (I >= 13) {
-            maxAMSsize += UINT32_C(0x10000);
-            if (I == 14) {
-                maxAMSsize += UINT32_C(0x10000);
-            }
-        }
+    if (I == 9) {
+        if (CalculatorType == TI89) expectedSize = 0x124772;
+        else if (CalculatorType == TI92P) expectedSize = 0x123F8E;
+        else goto SizeError;
     }
-    range = UINT32_C(0x10000);
-    if (CalculatorType == V200 && I == 12) {
-        range += UINT32_C(0x10000);
+    else if (I == 11) {
+        if (CalculatorType == TI89) expectedSize = 0x12E01A;
+        else if (CalculatorType == TI92P) expectedSize = 0x12D96A;
+        else if (CalculatorType == V200) expectedSize = 0x12DBEE;
+        else goto SizeError;
+    }
+    else if (I == 12) {
+        if (CalculatorType == TI89) expectedSize = 0x12E2FE;
+        else if (CalculatorType == TI92P) expectedSize = 0x12DC4E;
+        else if (CalculatorType == V200) expectedSize = 0;
+        else goto SizeError;
+    }
+    else if (I == 13) {
+        if (CalculatorType == TI89T) expectedSize = 0x14565A;
+        else if (CalculatorType == V200) expectedSize = 0x148D3A;
+        else goto SizeError;
+    }
+    else if (I == 14) {
+        if (CalculatorType == TI89T) expectedSize = 0x155C3E;
+        else goto SizeError;
+    }
+    else {
+        printf ("\n    ERROR : unsupported AMS version.\n"
+                "    Use AMS 2.05, 2.08, 2.09, 3.01 or 3.10.\n"
+                "    If you really need another version, please contact the author.\n"
+               );
+        fclose (input);
+        return 5;
     }
 
-    printf("\tINFO: expecting a size between 0x%" PRIX32 " and 0x%" PRIX32 ":", maxAMSsize - range, maxAMSsize);
-    if ((BasecodeSize + 67 < maxAMSsize - range) || (BasecodeSize + 67 >= maxAMSsize)) {
-        printf ("\n    ERROR: unexpected size in file, aborting...\n");
-        fclose(input);
-        return 6;
+    // Special case: multiple versions bear the same version number.
+    if (CalculatorType == V200 && I == 12) {
+        if (BasecodeSize != 0x12DECA && BasecodeSize != 0x1393F6) {
+            goto SizeError;
+        }
     }
-    printf(" correct.\n");
+    else {
+        if (BasecodeSize != expectedSize) {
+SizeError:
+            printf ("\n    ERROR: unexpected size 0x%" PRIX32 " in file, aborting...\n", BasecodeSize);
+            fclose(input);
+            return 6;
+        }
+    }
 
     return 0;
 }
 
 
-static int CreateFillOutputFile(int argc, char *argv[]) {
+static int CreateFillOutputFileAMS(int argc, char *argv[]) {
     uint32_t i;
 
     OutputFileName = argv[argc - 1];
@@ -474,14 +435,15 @@ static int SetupAMS(int argc, char *argv[]) {
         return i;
     }
     
-    i = CreateFillOutputFile(argc, argv);
+    i = CreateFillOutputFileAMS(argc, argv);
     if (i) {
         return i;
     }
 
 
     // Setup internal variables.
-    jmp_tbl = GetAMSVector(0xC8);
+    fseek(output, HEAD + 0x88 + 0xC8, SEEK_SET);
+    jmp_tbl = ReadLong();
     ROM_base = jmp_tbl & UINT32_C(0xE00000);
     delta = ROM_base + UINT32_C(0x12000) - HEAD;
 
@@ -551,7 +513,7 @@ int main (int argc, char *argv[])
 {
     int i;
 
-    printf ("\n- TIOS Modder v0.2.3a by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n");
+    printf ("\n- TIOS Modder v0.2.4 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n");
     printf ("- Using patchset: " PATCHDESC "\n\n");
     if ((argc < 3) || (!strcmp(argv[1], "-h")) || (!strcmp(argv[1], "--help"))) {
         printf ("    Usage : tiosmod [+/-options] base.xxu patched_base.xxu\n"

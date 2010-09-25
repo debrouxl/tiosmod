@@ -11,10 +11,65 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details.
  */ 
 
-#define PATCHDESC "amspatch-debrouxl-v8"
+#define PATCHDESC "amspatch-debrouxl-v9"
 
 // Include the file that contains the helper functions we're taking advantage of.
 #include "tiosmod.c"
+
+
+//! Get address of given vector.
+static uint32_t GetAMSVector (uint32_t absaddr) {
+    fseek(output, HEAD + 0x88 + absaddr, SEEK_SET);
+    return ReadLong();
+}
+
+//! Replace given vector with given address.
+static void SetAMSVector (uint32_t absaddr, uint32_t newval) {
+    fseek(output, HEAD + 0x88 + absaddr, SEEK_SET);
+    return WriteLong(newval);
+}
+
+//! Get address of a PC-relative JSR or LEA.
+static uint32_t Get68kPCRelativeValue (uint32_t absaddr) {
+    Seek(absaddr);
+    return absaddr + ((int32_t)(int16_t)ReadShort());
+}
+
+//! Get address of given function of trap #$B.
+static uint32_t GetAMSTrapBFunction (uint32_t idx) {
+    uint32_t temp;
+
+    if (TrapBFunctions == 0) {
+        temp = GetAMSVector(0xAC);
+        Seek(temp);
+        temp = SearchLong(UINT32_C(0xC6FC0006));
+        TrapBFunctions = Get68kPCRelativeValue(temp - 6);
+    }
+    return GetLong(TrapBFunctions + 6 * idx);
+}
+
+//! Get attribute in OO_SYSTEM_FRAME.
+static uint32_t GetAMSAttribute (uint32_t attr) {
+    uint32_t temp;
+    uint32_t temp2;
+    int32_t limit;
+    
+    if (AMS_Frame == 0) {
+        temp = GetAMSVector(0xA8);
+        AMS_Frame = GetLong(temp + 10);
+    }
+    Seek(AMS_Frame + 0x0E);
+    limit = ReadLong();
+    while (limit >= 0) {
+        temp = ReadLong();
+        temp2 = ReadLong();
+        if (temp == attr) {
+            return temp2;
+        }
+        limit--;
+    }
+    return UINT32_C(0xFFFFFFFF);
+}
 
 
 //! Kill the protections set by TI.
@@ -261,11 +316,12 @@ static void OptimizeAMS(void) {
 
 //! Fix TI's bugs: they have abandoned the TI-68k calculator line in 2005...
 static void FixAMS(void) {
-    uint32_t temp, temp2;
+    uint32_t temp, temp2, temp3, temp4;
     
-    // 3a) Idea by Martial Demolins (Folco): on trap #3, wire a new routine that does a UniOS/PreOS-style HeapDeref.
+    // 3a) Idea by Martial Demolins (Folco): on trap #3, wire a new routine that does a UniOS/PreOS/PedroM-style HeapDeref.
     //     Pristine AMS copies have OSenqueue wired, but that won't work at all.
     {
+        printf("Replacing buggy trap #3 by UniOS/PreOS/PedroM-style HeapDeref\n");
         temp = rom_call_addr(HeapTable);
         temp2 = ROM_base + 0x13800;
         Seek(temp2);
@@ -284,6 +340,32 @@ static void FixAMS(void) {
         SetAMSVector(0x8C, temp2);
     }
 
+    // 3b) Fix bug #53 of http://www.technicalc.org/buglist/bugs.pdf , worked around in TIGCC & GCC4TI:
+    //     OSContrastUp and OSContrastDn destroy the contents of registers d3 and d4, which they are not allowed to do.
+    {
+        temp = rom_call_addr(OSContrastUp);
+        temp2 = rom_call_addr(OSContrastDn);
+
+        temp3 = GetShort(temp);
+        if (temp3 == 0x48A7) {
+
+            temp3 = GetShort(temp2);
+            if (temp3 == 0x48A7) {
+
+                temp3 = SearchShort(0x4C9F);
+
+                temp4 = SearchShort(0x48A7);
+                if (temp4 - temp3 <= 0x10) {
+                    PutShort(0x48E7, temp);
+                    PutShort(0x48E7, temp2);
+                    PutShort(0x4CDF, temp3 - 2);
+                    PutShort(0x48E7, temp4 - 2);
+                    printf("Fixing buggy OSContrastUp & OSContrastDn at %06" PRIX32 ", %06" PRIX32 ", %06" PRIX32 ", %06" PRIX32 "\n",
+                           temp, temp2, temp3 - 2, temp4 - 2);
+                }
+            }
+        }
+    }
 }
 
 
@@ -600,7 +682,7 @@ static void ShrinkAMS(void) {
 
 //! Add functionality to AMS.
 static void ExpandAMS(void) {
-
+    // TODO? reintegrate OSVRegisterTimer/OSVFreeTimer.
 }
 
 
