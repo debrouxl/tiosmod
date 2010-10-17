@@ -45,6 +45,7 @@ enum {TI89 = 3, TI92P = 1, V200 = 8, TI89T = 9};
 #define EM_GetArchiveMemoryBeginning (0x3CF)
 #define EV_runningApp                (0x45D)
 #define EX_stoBCD                    (0x0C0)
+#define FiftyMsecTick                (0x4FC)
 #define HeapDeref                    (0x096)
 #define HeapTable                    (0x441)
 #define memcmp                       (0x270)
@@ -55,6 +56,9 @@ enum {TI89 = 3, TI92P = 1, V200 = 8, TI89T = 9};
 #define XR_stringPtr                 (0x293)
 #define OSContrastDn                 (0x297)
 #define OSContrastUp                 (0x296)
+#define OSRegisterTimer              (0x0F0)
+#define OSVFreeTimer                 (0x285)
+#define OSVRegisterTimer             (0x284)
 
 
 #define AdditionalSize (4 + 2 + 3 + 64)
@@ -72,6 +76,7 @@ static uint32_t AMS_Frame;
 static uint32_t F_4x6_data;
 static uint32_t F_6x8_data;
 static uint32_t F_8x10_data;
+static uint32_t Trap9Pointers;
 static uint32_t TrapBFunctions;
 static uint8_t  AMS_Major;
 static uint8_t  AMS_Minor;
@@ -193,7 +198,7 @@ static uint32_t Tell (void) {
 }
 
 
-// Search for values, return the absolute address of the first byte after the value.
+// Search forward for values, return the absolute address of the first byte after the value.
 static uint32_t SearchByte (uint8_t value) {
     while (ReadByte() != value);
     return Tell();
@@ -210,6 +215,30 @@ static uint32_t SearchLong (uint32_t value) {
     }
     return Tell();
 }
+
+
+// Search backwards for values, return the absolute address of the value.
+static uint32_t SearchBackwardsByte (uint8_t value) {
+    while (ReadByte() != value) {
+        fseek(output, -2, SEEK_CUR);
+    }
+    return Tell() - 1;
+}
+
+static uint32_t SearchBackwardsShort (uint16_t value) {
+    while (ReadShort() != value) {
+        fseek(output, -4, SEEK_CUR);
+    }
+    return Tell() - 2;
+}
+
+static uint32_t SearchBackwardsLong (uint32_t value) {
+    while (ReadLong() != value) {
+        fseek(output, -6, SEEK_CUR);
+    }
+    return Tell() - 4;
+}
+
 
 
 //! Get address of given ROM_CALL.
@@ -448,6 +477,7 @@ static int SetupAMS(int argc, char *argv[]) {
     delta = ROM_base + UINT32_C(0x12000) - HEAD;
 
     TIOS_entries = rom_call_addr(-1);
+    Trap9Pointers = 0;
     TrapBFunctions = 0;
     AMS_Frame = 0;
     temp = rom_call_addr(ReleaseVersion);
@@ -513,7 +543,7 @@ int main (int argc, char *argv[])
 {
     int i;
 
-    printf ("\n- TIOS Modder v0.2.4 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n");
+    printf ("\n- TIOS Modder v0.2.5 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n");
     printf ("- Using patchset: " PATCHDESC "\n\n");
     if ((argc < 3) || (!strcmp(argv[1], "-h")) || (!strcmp(argv[1], "--help"))) {
         printf ("    Usage : tiosmod [+/-options] base.xxu patched_base.xxu\n"

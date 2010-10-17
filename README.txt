@@ -58,6 +58,18 @@ illegal in most countries ;-)
 Changelog
 ------------------------------------------------------------------------------------------
 
+v0.2.5: posted on Cemetech, Omnimaga and TI-Bank on 20101017.
+    * supported AMS versions: 2.05, 2.08, 2.09, 3.01, 3.10 for all models.
+    * improvements:
+        * the Flash memory execution protection is now, hopefully, disabled on HW1
+          calculators as well. Spotted by Kevin Kofler.
+    * new enhancement capabilities:
+        * add back OSVRegisterTimer/OSVFreeTimer + handling code in the AUTO_INT_5
+          handler and in the timer initialization code, removed by TI in AMS 2.04.
+          Ultimately, what makes this easy enough is the fact that while the _code_ was
+          removed by TI, the storage area (2*12 bytes) in RAM was not: it remains
+          reserved and accessible through trap #9.
+
 v0.2.4: posted on Cemetech, Omnimaga and TI-Bank on 20100925.
     * supported AMS versions: 2.05, 2.08, 2.09, 3.01, 3.10 for all models.
     * moved more AMS-specific functions from tiosmod.c to amspatch.c.
@@ -161,8 +173,10 @@ Todo / wish list
         * (easiest) don't go much beyond splitting the building blocks and the patch
           itself, and compile these files together. This was implemented in v0.2.2,
           before, perhaps, doing better some day :)
-      NOTE: due to pagination, TI-Z80 OS support is harder than TI-68k OS support...
-      
+      NOTE1: due to pagination, TI-Z80 OS support is harder than TI-68k OS support...
+      NOTE2: libti* contain GPL'ed code for loading TI-Z80 OS (stored in Intel Hex
+             format).
+
 /   * shrink AMS binaries, so as to leave more Flashapp & archive room available to
       users and programmers. Significant chunks of data at the end of the OS can be
       moved to the space wasted by TI (but rightfully used by PedroM) between
@@ -193,15 +207,8 @@ Todo / wish list
         * AMS Extender / EasyChar / ticonst;
         * AutoAlphaLock Off.
 
-0   * (??) put new features into the OS, or just restore features removed by TI ??
+/   * (??) put new features into the OS, or just restore features removed by TI ??
         * PreOS (hard)
-        * OSVRegisterTimer/OSVFreeTimer, removed by TI in AMS 2.04, and their handling
-          in the AI5 handler.
-          __OSTimerVectors is accessible through trap #9 and referenced from the AI5
-          handler of AMS <= 2.03. On those versions, the first vectored timer is wired to
-          the routine that, between others, calls the battery checking code.
-            2) checking whether the room for __OSTimerVectors is really present, but
-               unused, on AMS 2.04+.
 
 
 ------------------------------------------------------------------------------------------

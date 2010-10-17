@@ -11,7 +11,7 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details.
  */ 
 
-#define PATCHDESC "amspatch-debrouxl-v9"
+#define PATCHDESC "amspatch-debrouxl-v10"
 
 // Include the file that contains the helper functions we're taking advantage of.
 #include "tiosmod.c"
@@ -26,13 +26,30 @@ static uint32_t GetAMSVector (uint32_t absaddr) {
 //! Replace given vector with given address.
 static void SetAMSVector (uint32_t absaddr, uint32_t newval) {
     fseek(output, HEAD + 0x88 + absaddr, SEEK_SET);
-    return WriteLong(newval);
+    WriteLong(newval);
+}
+
+//! Replace given vector with given address.
+static void SetAMSrom_call (uint32_t idx, uint32_t newval) {
+    PutLong(newval, jmp_tbl + 4 * idx);
 }
 
 //! Get address of a PC-relative JSR or LEA.
 static uint32_t Get68kPCRelativeValue (uint32_t absaddr) {
     Seek(absaddr);
     return absaddr + ((int32_t)(int16_t)ReadShort());
+}
+
+//! Get address of given item of trap #9.
+static uint32_t GetAMSTrap9Item (uint32_t idx) {
+    uint32_t temp;
+
+    if (Trap9Pointers == 0) {
+        temp = GetAMSVector(0xA4);
+        Seek(temp);
+        Trap9Pointers = GetLong(temp + 2);
+    }
+    return GetLong(Trap9Pointers + 4 * idx);
 }
 
 //! Get address of given function of trap #$B.
@@ -87,15 +104,21 @@ static void UnlockAMS(void) {
     }
 
 
-    // 1b) Disable Flash execution protection by setting a higher value in port 700012.
+    // 1b) Disable Flash execution protection:
+    //         * on HW2+, by setting a higher value in port 700012;
+    //         * on HW1, by turning reads from three stealth I/O ranges to writes to those ranges.
     {
-        // * 1 direct write in the early reset code.
+        // * HW2+: 1 direct write early in the reset code.
         temp = ROM_base + 0x12188;
         Seek(temp);
         temp = SearchLong(UINT32_C(0x700012));
         printf("Killing Flash execution protection initialization at %06" PRIX32 "\n", temp - 8);
         PutShort(0x003F, temp - 6);
-        // * 1 reference in a subroutine of the trap #$B, function $10 handler.
+        // * HW1: three references to the stealth I/O ports in the early reset code
+        PutShort(0x33C0, temp - 26);
+        PutShort(0x33C0, temp - 20);
+        PutShort(0x33C0, temp - 14);
+        // * HW2+: 1 reference in a subroutine of the trap #$B, function $10 handler.
         temp = GetAMSTrapBFunction(0x10);
         printf("Killing Flash execution protection update at %06" PRIX32 "\n", temp);
         Seek(temp);
@@ -120,7 +143,7 @@ static void UnlockAMS(void) {
 
     // 1d) Hard-code Flashappy, for seamless install of unsigned FlashApps (e.g. some versions of GTC).
     {
-        Seek(ROM_base + UINT32_C(0x12188));
+        Seek(ROM_base + UINT32_C(0x20000));
         temp = rom_call_addr(XR_stringPtr);
         temp2 = SearchLong(UINT32_C(0x0000020E));
         if (ReadShort() != 0x4EB9 || ReadLong() != temp) {
@@ -142,7 +165,7 @@ static void UnlockAMS(void) {
     //     (TI made the check ineffective in 3.xx, without removing it...).
     {
         if (AMS_Major == 2) {
-            Seek(ROM_base + UINT32_C(0x12188));
+            Seek(ROM_base + UINT32_C(0x20000));
             if (AMS_Minor == 5) {
                 temp = SearchLong(0x0C526000);
                 printf("Killing the limitation of the size of ASM programs at %06" PRIX32 "\n", temp - 4);
@@ -162,7 +185,7 @@ static void UnlockAMS(void) {
 
     // 1f) Remove "Invalid Program Reference" artificial limitation.
     {
-        Seek(ROM_base + UINT32_C(0x12188));
+        Seek(ROM_base + UINT32_C(0x20000));
         temp = SearchShort(0xA244);
         printf("Killing the \"Invalid Program Reference\" error at %06" PRIX32 ", ", temp - 2);
         PutShort(0x4E71, temp - 2);
@@ -323,7 +346,7 @@ static void FixAMS(void) {
     {
         printf("Replacing buggy trap #3 by UniOS/PreOS/PedroM-style HeapDeref\n");
         temp = rom_call_addr(HeapTable);
-        temp2 = ROM_base + 0x13800;
+        temp2 = ROM_base + 0x13100;
         Seek(temp2);
         WriteShort(0xD0C8);
         WriteShort(0xD0C8);
@@ -376,6 +399,7 @@ static void ShrinkAMS(void) {
     uint32_t src;
     uint32_t dest;
 
+    // 4a) Shrink AMS 2.08 and 2.09 for 89.
     if (I == 11 && CalculatorType == TI89) {
         src  = UINT32_C(0x33FEE0);
         dest = UINT32_C(0x214000);
@@ -514,7 +538,7 @@ static void ShrinkAMS(void) {
         src  = UINT32_C(0x33FFB0);
         dest = UINT32_C(0x214000);
 
-        printf("WIP: Shrinking AMS 2.09 for 89, to make it fit into the same number of sectors as earlier AMS 2.xx versions...");
+        printf("Shrinking AMS 2.09 for 89, to make it fit into the same number of sectors as earlier AMS 2.xx versions...");
         // 33FFB0: 90 bytes: TITABLED menu.
         GetNBytes(buffer, 90, src);
         PutNBytes(buffer, 90, dest);
@@ -682,7 +706,133 @@ static void ShrinkAMS(void) {
 
 //! Add functionality to AMS.
 static void ExpandAMS(void) {
-    // TODO? reintegrate OSVRegisterTimer/OSVFreeTimer.
+    uint32_t temp, temp2, temp3, temp4, temp5, temp6;
+
+    // 5a) Reintegrate OSVRegisterTimer/OSVFreeTimer functionality.
+    {
+        printf("Reintegrating OSVRegisterTimer/OSVFreeTimer functionality\n");
+        // Add a new AI5 handler and modify the original one.
+        temp = GetAMSVector(0x74);
+        Seek(temp);
+        temp2 = ReadLong();
+        temp3 = SearchShort(0x4E73);
+        temp4 = GetLong(temp3 - 6);
+        Seek(temp3 - 6);
+        WriteShort(0x4E75);
+        temp5 = GetAMSTrap9Item(3);
+        temp6 = ROM_base + 0x13110;
+        Seek(temp6);
+        WriteLong(temp2);
+        WriteShort(0x4EB9);
+        WriteLong(temp + 4);
+        WriteShort(0x45F8);
+        WriteShort(temp5);
+        WriteShort(0x76FF);
+        WriteShort(0xB69A);
+        WriteShort(0x6718);
+        WriteShort(0x5392);
+        WriteShort(0x6614);
+        WriteLong(UINT32_C(0x24EAFFFC));
+        WriteShort(0x205A);
+        WriteShort(0x4E90);
+        WriteShort(0xB4FC);
+        WriteShort(temp5 + 24);
+        WriteShort(0x6DEA);
+        WriteLong(temp4);
+        WriteShort(0x4E73);
+        WriteShort(0x508A);
+        WriteShort(0x60F0);
+        SetAMSVector(0x74, temp6);
+
+        // Rewrite the timer-related reset (init) code entirely.
+        // It's easy enough to end up with code smaller than TI's code, despite the new code providing more functionality...
+        temp = rom_call_addr(FiftyMsecTick);
+        temp2 = GetAMSTrap9Item(4);
+        temp6 = rom_call_addr(OSRegisterTimer);
+        Seek(temp6);
+        temp6 = SearchBackwardsShort(0x48E7);
+        WriteShort(0x7000);
+        if (temp < 0x8000) {
+            WriteShort(0x21C0);
+            WriteShort(temp);
+        }
+        else {
+            WriteShort(0x23C0);
+            WriteLong(temp);
+        }
+        WriteShort(0x41F8);
+        WriteShort(temp2 + 0xA);
+        WriteShort(0x43F8);
+        temp3 = 8;
+        if (AMS_Major == 2) {
+            if (AMS_Minor == 5) {
+                temp3 = 7;
+            }
+        }
+        else {
+            if (CalculatorType == TI89T) {
+                temp3 = 9;
+            }
+        }
+        WriteShort(temp5 - 2 * temp3);
+        WriteByte(0x74);
+        WriteByte(temp3 - 1);
+        WriteShort(0x72FF);
+        WriteShort(0x20C1);
+        WriteShort(0x20C0);
+        WriteShort(0x32C0);
+        WriteLong(UINT32_C(0x51CAFFF8));
+        WriteShort(0x22C1);
+        WriteShort(0x22C0);
+        WriteShort(0x22C0);
+        WriteShort(0x22C1);
+        WriteShort(0x22C0);
+        WriteShort(0x22C0);
+        WriteShort(0x4E75);
+
+        // OSVRegisterTimer.
+        temp6 = ROM_base + 0x13140;
+        Seek(temp6);
+        WriteShort(0x7000);
+        WriteLong(UINT32_C(0x322F0004));
+        WriteShort(0x5341);
+        WriteShort(0x74FF);
+        WriteLong(UINT32_C(0x0C410002));
+        WriteShort(0x641C);
+        WriteShort(0x41F8);
+        WriteShort(temp5);
+        WriteLong(UINT32_C(0xC2FC000C));
+        WriteShort(0xD1C1);
+        WriteShort(0xB490);
+        WriteShort(0x660E);
+        WriteLong(UINT32_C(0x242F0006));
+        WriteShort(0x20C2);
+        WriteShort(0x20C2);
+        WriteLong(UINT32_C(0x20AF000A));
+        WriteShort(0x5240);
+        WriteShort(0x4E75);
+        SetAMSrom_call(OSVRegisterTimer, temp6);
+
+        // OSVFreeTimer.
+        temp6 = ROM_base + 0x13170;
+        Seek(temp6);
+        WriteShort(0x7000);
+        WriteLong(UINT32_C(0x322F0004));
+        WriteShort(0x5341);
+        WriteShort(0x74FF);
+        WriteLong(UINT32_C(0x0C410002));
+        WriteShort(0x6412);
+        WriteShort(0x41F8);
+        WriteShort(temp5);
+        WriteLong(UINT32_C(0xC3FC000C));
+        WriteShort(0xD1C1);
+        WriteShort(0x20C2);
+        WriteShort(0x4298);
+        WriteShort(0x4290);
+        WriteShort(0x5240);
+        WriteShort(0x4E75);
+        SetAMSrom_call(OSVFreeTimer, temp6);
+    }
 }
 
 
