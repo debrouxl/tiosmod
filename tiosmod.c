@@ -122,11 +122,13 @@ static uint32_t ReadLong (void) {
 // Write data at the current file position.
 static void WriteByte (uint8_t byte_in) {
     fputc (((int)byte_in) & 0xFF, output);
+    fflush(output);
 }
 
 static void WriteShort (uint16_t short_in) {
     fputc (((int)(short_in >> 8)) & 0xFF, output);
     fputc (((int)(short_in     )) & 0xFF, output);
+    fflush(output);
 }
 
 static void WriteLong (uint32_t long_in) {
@@ -134,6 +136,7 @@ static void WriteLong (uint32_t long_in) {
     fputc (((int)(long_in >> 16)) & 0xFF, output);
     fputc (((int)(long_in >>  8)) & 0xFF, output);
     fputc (((int)(long_in      )) & 0xFF, output);
+    fflush(output);
 }
 
 
@@ -222,21 +225,24 @@ static uint32_t SearchBackwardsByte (uint8_t value) {
     while (ReadByte() != value) {
         fseek(output, -2, SEEK_CUR);
     }
-    return Tell() - 1;
+    fseek(output, -1, SEEK_CUR);
+    return Tell();
 }
 
 static uint32_t SearchBackwardsShort (uint16_t value) {
     while (ReadShort() != value) {
         fseek(output, -4, SEEK_CUR);
     }
-    return Tell() - 2;
+    fseek(output, -2, SEEK_CUR);
+    return Tell();
 }
 
 static uint32_t SearchBackwardsLong (uint32_t value) {
     while (ReadLong() != value) {
         fseek(output, -6, SEEK_CUR);
     }
-    return Tell() - 4;
+    fseek(output, -4, SEEK_CUR);
+    return Tell();
 }
 
 
@@ -526,14 +532,24 @@ static void FinishAMS(void) {
         PutLong(temp, ROM_base + UINT32_C(0x12000) - 4); // Slightly dirty.
     }
 
-    fclose(output);
-
     // Truncate file if necessary.
     if (SizeShrunk != 0) {
+        int fd;
         printf("\n\tINFO: final file size is %" PRIu32 " (0x%" PRIX32 ")\n", OutputFileSize, OutputFileSize);
-        if (truncate(OutputFileName, OutputFileSize) != 0) {
+#ifdef WIN32
+#define fileno _fileno
+#define ftruncate _chsize
+#endif
+        fd = fileno(output);
+        if (fd != -1) {
+            if (ftruncate(fd, OutputFileSize) != 0) {
+                printf("ERROR truncating file, OS will probably be invalid\n");
+            }
+        }
+        else {
             printf("ERROR truncating file, OS will probably be invalid\n");
         }
+        fclose(output);
     }
 }
 
@@ -543,7 +559,7 @@ int main (int argc, char *argv[])
 {
     int i;
 
-    printf ("\n- TIOS Modder v0.2.5 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n");
+    printf ("\n- TIOS Modder v0.2.6 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n");
     printf ("- Using patchset: " PATCHDESC "\n\n");
     if ((argc < 3) || (!strcmp(argv[1], "-h")) || (!strcmp(argv[1], "--help"))) {
         printf ("    Usage : tiosmod [+/-options] base.xxu patched_base.xxu\n"

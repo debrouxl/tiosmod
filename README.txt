@@ -1,7 +1,7 @@
 ==========================================================================================
 tiosmod - a computer-based unlocking and optimizing program aimed at official TI-68k
           calculators OS
-Copyright (C) 2010 Lionel Debroux (lionel underscore debroux yahoo fr)
+Copyright (C) 2010 Lionel Debroux - TICT (lionel underscore debroux yahoo fr)
 Portions Copyright (C) 2000-2010 Olivier Armand
 ==========================================================================================
 
@@ -33,8 +33,10 @@ or the older TIB-Receiver, any longer :-)
 Usage information
 ------------------------------------------------------------------------------------------
 * Users just interested in using patched AMS versions should use the provided binary
-  diffs, with the open-source no-fee program whose name is indicated by the binary diff's
-  extension. For more information, see the usage help printed by each program.
+  diffs. Currently, four formats are provided: xdelta 1.x, xdelta 3.x, bsdiff 4.x, ips.
+  For all of those formats, there's at least one no-fee program that can handle them,
+  and some of these programs are open source. For more information, see the usage help
+  printed by each program.
   NOTE: the binary diffs provided along with the official distribution perform _all_
         changes that the patchset knows how to perform, including:
         * hard-coding the standard font (it will hardly make a difference to anyone,
@@ -42,21 +44,35 @@ Usage information
         * hard-coding the English language (it will make a difference to more users,
           since it interferes with language localizations).
 
-* Programmers interested in tinkering with the patcher / patchsets, who know what they're
-  doing, can figure out how to compile the program by themselves ;-)
+* Programmers interested in tinkering with the patcher / patchsets, who know wha
+  they're doing, can figure out how to compile the program by themselves ;-)
   See http://www.ticalc.org/archives/news/articles/14/145/145273.html for links to
-  RabbitSign (preferred nowadays) and FSign+FreeFlash, the former being more convenient.
+  RabbitSign and FSign+FreeFlash, the former being preferred nowadays because it's more
+  convenient.
 
 Standard warranty disclaimer: you're on your own if you mess up calculators by using
 pristine or modified versions of the patcher & patchset(s).
 
-Please also note also that *redistributing* modified versions of TI's copyrighted OS is
-illegal in most countries ;-)
+Please also note that *redistributing* ready-made, modified versions of TI's copyrighted
+OS is illegal in most countries ;-)
 
 
 ------------------------------------------------------------------------------------------
 Changelog
 ------------------------------------------------------------------------------------------
+
+v0.2.6: posted on Cemetech, Omnimaga, TI-Bank and yAronet on 20101024.
+    * supported AMS versions: no change.
+    * bugfixes: add an fseek to SearchBackwards* building blocks of tiosmod.c;
+    * new fixing capabilities:
+        * fix the bug that can occur when changing batteries (HW3Patch does it).
+    * improvements:
+        * the program can now be compiled under Windows as well: msvcrt offers fileno
+          + truncate, only called differently. Add explicit Seek() or internal fseek()
+          before using Write* or Search* - it doesn't seem to be necessary on *nix, but
+          seems to be on Wine (at least).
+
+Uploaded to ticalc.org on 20101017.
 
 v0.2.5: posted on Cemetech, Omnimaga and TI-Bank on 20101017.
     * supported AMS versions: 2.05, 2.08, 2.09, 3.01, 3.10 for all models.

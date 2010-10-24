@@ -11,7 +11,7 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details.
  */ 
 
-#define PATCHDESC "amspatch-debrouxl-v10"
+#define PATCHDESC "amspatch-debrouxl-v11"
 
 // Include the file that contains the helper functions we're taking advantage of.
 #include "tiosmod.c"
@@ -135,6 +135,7 @@ static void UnlockAMS(void) {
         Seek(temp);
         temp = SearchLong(UINT32_C(0xFFFF0000));
         printf("Killing the limitation of the available amount of archive memory at %06" PRIX32 "\n", temp);
+        Seek(temp);
         WriteShort(0x2040);
         WriteShort(0x508F);
         WriteShort(0x4E75);
@@ -189,9 +190,11 @@ static void UnlockAMS(void) {
         temp = SearchShort(0xA244);
         printf("Killing the \"Invalid Program Reference\" error at %06" PRIX32 ", ", temp - 2);
         PutShort(0x4E71, temp - 2);
+        Seek(temp);
         temp = SearchShort(0xA244);
         printf("%06" PRIX32 ", ", temp - 2);
         PutShort(0x4E71, temp - 2);
+        Seek(temp);
         temp = SearchShort(0xA244);
         printf("%06" PRIX32 "\n", temp - 2);
         PutShort(0x4E71, temp - 2);
@@ -388,6 +391,21 @@ static void FixAMS(void) {
                 }
             }
         }
+    }
+
+    // 3c) Fix the bug that can occur when changing batteries (HW3Patch fixes it).
+    {
+        temp = GetAMSVector(0xAC);
+        Seek(temp);
+        temp2 = SearchShort(0x4E68);
+        temp2 += 4;
+        Seek(temp2);
+        WriteShort(0x4600);
+        WriteLong(UINT32_C(0x020000FF));
+        WriteLong(UINT32_C(0x0A000000));
+        WriteShort(0x4600);
+        WriteLong(UINT32_C(0x00000000));
+        printf("Fixing bug that can occur when changing batteries at %06" PRIX32 "\n", temp2);
     }
 }
 
