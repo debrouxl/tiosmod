@@ -1,7 +1,8 @@
 ==========================================================================================
 tiosmod - a computer-based unlocking and optimizing program aimed at official TI-68k
           calculators OS
-Copyright (C) 2010 Lionel Debroux - TICT (lionel underscore debroux yahoo fr)
+Copyright (C) 2010, 2020 Lionel Debroux - TICT (lionel underscore debroux yahoo fr)
+Copyright (C) 2020 RANDY Compton
 Portions Copyright (C) 2000-2010 Olivier Armand
 ==========================================================================================
 
@@ -60,6 +61,12 @@ OS is illegal in most countries ;-)
 ------------------------------------------------------------------------------------------
 Changelog
 ------------------------------------------------------------------------------------------
+
+v0.2.7:
+    * supported AMS versions: no change.
+    * new fixing capabilities:
+        * revert AMS 3.10 to the 0^0=1 behaviour of older versions. Patch and 89T test by
+          RANDY Compton, (emulated) V200 test by myself.
 
 v0.2.6: posted on Cemetech, Omnimaga, TI-Bank and yAronet on 20101024.
     * supported AMS versions: no change.

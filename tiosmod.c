@@ -32,6 +32,8 @@
 #define AMS_HARDCODE_FONTS_FLAG            (0x00000001)
 #define AMS_HARDCODE_ENGLISH_LANGUAGE_STR  "ams-hardcode-english-language"
 #define AMS_HARDCODE_ENGLISH_LANGUAGE_FLAG (0x00000002)
+#define AMS_REVERT_ZERO_POWER_ZERO_STR     "ams-revert-zero-power-zero"
+#define AMS_REVERT_ZERO_POWER_ZERO_FLAG    (0x00000004)
 
 
 //! Calculator models
@@ -59,6 +61,8 @@ enum {TI89 = 3, TI92P = 1, V200 = 8, TI89T = 9};
 #define OSRegisterTimer              (0x0F0)
 #define OSVFreeTimer                 (0x285)
 #define OSVRegisterTimer             (0x284)
+#define push_zstr                    (0x48A)
+#define push_exponentiate            (0x595)
 
 
 #define AdditionalSize (4 + 2 + 3 + 64)
@@ -269,7 +273,7 @@ static uint32_t ComputeAMSChecksum(uint32_t size, uint32_t start) {
 //! Find **TIFL** in .xxu file.
 static int FindTIFL (FILE *file) {
     char *point;
-    point = malloc(0xA008);
+    point = (char *)malloc(0xA008);
     if (!point) {
         printf("\n    ERROR : not enough memory.\n");
         return 1;
@@ -559,12 +563,13 @@ int main (int argc, char *argv[])
 {
     int i;
 
-    printf ("\n- TIOS Modder v0.2.6 by Lionel Debroux (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n");
+    printf ("\n- TIOS Modder v0.2.7 by Lionel Debroux & RANDY Compton (portions from TI-68k Flash Apps Installer v0.3 by Olivier Armand & Lionel Debroux) -\n");
     printf ("- Using patchset: " PATCHDESC "\n\n");
     if ((argc < 3) || (!strcmp(argv[1], "-h")) || (!strcmp(argv[1], "--help"))) {
         printf ("    Usage : tiosmod [+/-options] base.xxu patched_base.xxu\n"
                 "    options: * " AMS_HARDCODE_FONTS_STR " (defaults to enabled)\n"
                 "             * " AMS_HARDCODE_ENGLISH_LANGUAGE_STR " (defaults to disabled)\n"
+                "             * " AMS_REVERT_ZERO_POWER_ZERO_STR " (defaults to disabled)\n"
                 "    (prefix name option with '+' to force enable it, with '-' to force disable it)\n"
                );
         return 1;
@@ -590,6 +595,11 @@ int main (int argc, char *argv[])
         else if (!strcmp(argv[i]+1, AMS_HARDCODE_ENGLISH_LANGUAGE_STR)) {
             if (argv[i][0] == '+') {
                 enabled_changes |= AMS_HARDCODE_ENGLISH_LANGUAGE_FLAG;
+            }
+        }
+        else if (!strcmp(argv[i]+1, AMS_REVERT_ZERO_POWER_ZERO_STR)) {
+            if (argv[i][0] == '+') {
+                enabled_changes |= AMS_REVERT_ZERO_POWER_ZERO_FLAG;
             }
         }
     }

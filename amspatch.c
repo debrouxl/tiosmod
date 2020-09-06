@@ -11,7 +11,7 @@
  * http://sam.zoy.org/wtfpl/COPYING for more details.
  */ 
 
-#define PATCHDESC "amspatch-debrouxl-v11"
+#define PATCHDESC "amspatch-debrouxl-v12"
 
 // Include the file that contains the helper functions we're taking advantage of.
 #include "tiosmod.c"
@@ -406,6 +406,39 @@ static void FixAMS(void) {
         WriteShort(0x4600);
         WriteLong(UINT32_C(0x00000000));
         printf("Fixing bug that can occur when changing batteries at %06" PRIX32 "\n", temp2);
+    }
+
+    // 3d) Revert 0^0 to pre-3.10 behavior (1 with a warning instead of undef), by RANDY Compton
+    if ((enabled_changes & AMS_REVERT_ZERO_POWER_ZERO_FLAG) && AMS_Major == 3 && AMS_Minor == 10) {
+        temp = rom_call_addr(push_zstr);
+        Seek(temp);
+        temp2 = SearchShort(0x4E75);
+        temp = rom_call_addr(push_exponentiate);
+        Seek(temp);
+        temp3 = SearchBackwardsLong(UINT32_C(0x3EBC002A));
+        Seek(temp3);
+        WriteShort(0x2EBC);
+        WriteLong(UINT32_C(0x000005E7));
+        WriteShort(0x4EB9);
+        WriteLong(temp2);
+        WriteShort(0x4E71);
+        Seek(temp2);
+        temp2 = SearchLong(UINT32_C(0x66000188)) - 2;
+        PutShort(0x0056, temp2);
+        temp4 = SearchLong(UINT32_C(0x0C4005F2)) + 1;
+        PutByte(0x0C, temp4);
+        Seek(temp4 + 9);
+        WriteShort(0x6000);
+        WriteShort(0x0088);
+        WriteShort(0x6000);
+        WriteShort(0x0090);
+        WriteShort(0x4E71);
+        WriteShort(0x263C);
+        WriteLong(UINT32_C(0x00080000));
+        WriteShort(0x6000);
+        WriteShort(0x0104);
+        printf("Reverting to original 0^0 behavior at %06" PRIX32 ", %06" PRIX32 ", %06" PRIX32 "\n",
+               temp2, temp4, temp3);
     }
 }
 
